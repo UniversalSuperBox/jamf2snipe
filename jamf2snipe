@@ -392,7 +392,7 @@ def get_snipe_users(previous=[], session=None):
     response = session.get(user_id_url, headers=snipeheaders, json=payload, hooks={'response': request_handler})
     response_json = response.json()
     current = response_json['rows']
-    if len(previous) is not 0:
+    if len(previous) != 0:
         current = previous + current
     if response_json['total'] > len(current):
         logging.debug('We have more than 100 users, get the next page - total: {} current: {}'.format(response_json['total'], len(current)))
@@ -553,17 +553,17 @@ except Exception as e:
     logging.exception(e)
     JAMF_UP = False
 
-if SNIPE_UP is False:
+if not SNIPE_UP:
     logging.error('Snipe-IT looks like it is down from here. \nPlease check your config in the settings.conf file, or your instance.')
 else:
     logging.info('We were able to get a good response from your Snipe-IT instance.')
-if JAMF_UP is False:
+if not JAMF_UP:
     logging.error('JAMFPro looks down from here. \nPlease check the your config in the settings.conf file, or your hosted JAMFPro instance.')
 else:
     logging.info('We were able to get a good response from your JAMFPro instance.')
 
 # Exit if you can't contact SNIPE
-if ( JAMF_UP == False ) or ( SNIPE_UP == False ):
+if not JAMF_UP or not SNIPE_UP:
     raise SystemExit("Error: Host could not be contacted.")
 
 # Test that we can actually connect with the API keys.
@@ -578,7 +578,7 @@ snipemodels = get_snipe_models(session=SNIPE_SESSION)
 logging.debug("Parsing the {} model results for models with model numbers.".format(len(snipemodels['rows'])))
 modelnumbers = {}
 for model in snipemodels['rows']:
-    if model['model_number'] is "":
+    if model['model_number'] == "":
         logging.debug("The model, {}, did not have a model number. Skipping.".format(model['name']))
         continue
     modelnumbers[model['model_number']] =  model['id']
@@ -663,10 +663,10 @@ for jamf_type in jamf_types:
         snipe = search_snipe_asset(jamf['general']['serial_number'], session=SNIPE_SESSION)
 
         # Create a new asset if there's no match:
-        if snipe is 'NoMatch':
+        if snipe == 'NoMatch':
             logging.info("Creating a new asset in snipe for JAMF ID {} - {}".format(jamf['general']['id'], jamf['general']['name']))
             # This section checks to see if the asset tag was already put into JAMF, if not it creates one with with Jamf's ID.
-            if jamf['general']['asset_tag'] is '':
+            if jamf['general']['asset_tag'] == '':
                 jamf_asset_tag = None
                 logging.debug('No asset tag found in Jamf, checking settings.conf for alternative specified field.')
                 if 'asset_tag' in config['snipe-it']:
@@ -675,7 +675,7 @@ for jamf_type in jamf_types:
                         jamf_asset_tag = jamf['{}'.format(tag_split[0])]['{}'.format(tag_split[1])]
                     except:
                         raise SystemError('No such attribute {} in the jamf payload. Please check your settings.conf file'.format(tag_split))
-                if jamf_asset_tag is None or jamf_asset_tag is '':
+                if jamf_asset_tag is None or jamf_asset_tag == '':
                     logging.debug('No custom configuration found in settings.conf for asset tag name upon asset creation.')
                     if jamf_type == 'mobile_devices':
                         jamf_asset_tag = 'jamfid-m-{}'.format(jamf['general']['id'])
@@ -707,9 +707,9 @@ for jamf_type in jamf_types:
                     checkout_snipe_asset(jamf['{}'.format(jamfsplit[0])]['{}'.format(jamfsplit[1])],new_snipe_asset[1].json()['payload']['id'], "NewAsset", session=SNIPE_SESSION)
 
         # Log an error if there's an issue, or more than once match.
-        elif snipe is 'MultiMatch':
+        elif snipe == 'MultiMatch':
             logging.warning("WARN: You need to resolve multiple assets with the same serial number in your inventory. If you can't find them in your inventory, you might need to purge your deleted records. You can find that in the Snipe Admin settings. Skipping serial number {} for now.".format(jamf['general']['serial_number']))
-        elif snipe is 'ERROR':
+        elif snipe == 'ERROR':
             logging.error("We got an error when looking up serial number {} in snipe, which shouldn't happen at this point. Check your snipe instance and setup. Skipping for now.".format(jamf['general']['serial_number']))
 
         else:
@@ -759,7 +759,7 @@ for jamf_type in jamf_types:
                                 if snipe['rows'][0]['custom_fields'][CustomField]['value'] != latestvalue:
                                     logging.debug("Found the field, and the value needs to be updated from {} to {}".format(snipe['rows'][0]['custom_fields'][CustomField]['value'], latestvalue))
                                     needsupdate = True
-                        if needsupdate is True:
+                        if needsupdate:
                             update_snipe_asset(snipe_id, payload, session=SNIPE_SESSION)
                         else:
                             logging.debug("Skipping the payload, because it already exists, or the Snipe key we're mapping to doesn't.")

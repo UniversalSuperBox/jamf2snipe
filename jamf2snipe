@@ -52,6 +52,7 @@ import time
 import configparser
 import argparse
 import logging
+import sys
 
 # Set us up for using runtime arguments by defining them.
 runtimeargs = argparse.ArgumentParser()
@@ -118,8 +119,6 @@ apiKey = config['snipe-it']['apiKey']
 logging.debug("The API key you provided for Snipe is: {}".format(apiKey))
 defaultStatus = config['snipe-it']['defaultStatus']
 logging.info("The default status we'll be setting updated computer to is: {} (I sure hope this is a number or something is probably wrong)".format(defaultStatus))
-apple_manufacturer_id = config['snipe-it']['manufacturer_id']
-logging.info("The configured JAMFPro base url is: {} (Pretty sure this needs to be a number too)".format(apple_manufacturer_id))
 
 # Headers for the API call.
 
@@ -536,6 +535,23 @@ def checkout_snipe_asset(user, asset_id, checked_out_user=None, session=None):
         logging.error('Asset checkout failed for asset {} with error {}'.format(asset_id,response.text))
         return response
 
+def get_snipe_apple_manufacturer(session):
+    """ Returns the integer ID of the "Apple" manufacturer in snipe-it.
+
+    Raises ValueError if the "Apple" manufacturer is not found.
+    """
+    #TODO: Handle pagination of the /manufacturers endpoint
+    logging.info("Searching for the manufacturer with the name 'Apple'")
+    api_url = '{}/api/v1/manufacturers'.format(snipe_base)
+    r = session.get(api_url, headers=snipeheaders, verify=user_args.do_not_verify_ssl, hooks={'response': request_handler})
+    for manufacturer in r.json()["rows"]:
+        if manufacturer["name"].casefold() == "apple":
+            manufacturer_id = manufacturer["id"]
+            logging.info("Found the manufacturer with the name 'Apple', its ID is %i", manufacturer_id)
+            return manufacturer_id
+
+    raise ValueError("The Apple manufacturer was not found.")
+
 ### Run Testing ###
 # Report if we're verifying SSL or not.
 logging.info("SSL Verification is set to: {}".format(user_args.do_not_verify_ssl))
@@ -572,6 +588,18 @@ if not JAMF_UP or not SNIPE_UP:
 logging.info("Finished running our tests.")
 
 ### Get Started ###
+# Retrieve the ID of the manufacturer with the name "Apple", either from config
+# or from Snipe-IT
+apple_manufacturer_id = config['snipe-it'].get('manufacturer_id', None)
+if apple_manufacturer_id is None:
+    try:
+        apple_manufacturer_id = get_snipe_apple_manufacturer(SNIPE_SESSION)
+    except ValueError:
+        #TODO: Make everything else exit this way too.
+        logging.critical("Failed to find a manufacturer on your Snipe instance with the name 'Apple' and you did not set one in the configuration file. Make sure the 'Apple' manufacturer exists or set the manufacturer_id in settings.conf.")
+        sys.exit(1)
+logging.debug("Snipe-IT 'Apple' Manufacturer ID is set to %s", apple_manufacturer_id)
+
 # Get a list of known models from Snipe
 logging.info("Getting a list of computer models that snipe knows about.")
 snipemodels = get_snipe_models(session=SNIPE_SESSION)
@@ -639,6 +667,7 @@ for jamf_type in jamf_types:
         elif jamf_type == 'mobile_devices':
             jamf = search_jamf_mobile(jamf_asset['id'], session=JAMF_SESSION)
         if jamf is None:
+            logging.warning("JAMF did not return a device for ID %s for type %s", jamf_asset['id'], jamf_type)
             continue
 
         # Check that the model number exists in snipe, if not create it.

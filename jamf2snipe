@@ -188,8 +188,15 @@ def request_handler(r, *args, **kwargs):
         raise SystemExit("We've been rate limited. Use option -r to respect the built in Snipe IT API rate limit of 120/minute.")
     return r
 
-# Function to make the API call for all JAMF devices
 def get_jamf_computers(session=None):
+    """Retrieves a list of all computers from the JAMF instance.
+
+    The JAMF instance is specified by the global variable ``jamfpro_base``
+
+    :param session:
+        requests.Session object to use for this request. If none is provided,
+        one will be created for you.
+    """
     if session is None:
         session = requests.Session()
     api_url = '{0}/JSSResource/computers'.format(jamfpro_base)
@@ -210,8 +217,16 @@ def get_jamf_computers(session=None):
         logging.debug("Returning a null value for the function.")
         return None
 
-# Function to make the API call for all JAMF mobile devices
 def get_jamf_mobiles(session=None):
+    """Retrieves a list of all mobile devices from the JAMF instance.
+
+    The JAMF instance is specified by the global variable ``jamfpro_base``
+
+    :param session:
+        requests.Session object to use for this request. If none is provided,
+        one will be created for you.
+        provided.
+    """
     if session is None:
         session = requests.Session()
     api_url = '{0}/JSSResource/mobiledevices'.format(jamfpro_base)
@@ -232,8 +247,17 @@ def get_jamf_mobiles(session=None):
         logging.debug("Returning a null value for the function.")
         return None
 
-# Function to lookup a JAMF asset by id.
 def search_jamf_asset(jamf_id, session=None):
+    """Retrieves a single computer from the JAMF instance by ID.
+
+    The JAMF instance is specified by the global variable ``jamfpro_base``
+
+    :param jamf_id: JAMF instance's unique ID value identifying this computer.
+
+    :param session:
+        requests.Session object to use for this request. If none is provided,
+        one will be created for you.
+    """
     if session is None:
         session = requests.Session()
     api_url = "{}/JSSResource/computers/id/{}".format(jamfpro_base, jamf_id)
@@ -255,8 +279,18 @@ def search_jamf_asset(jamf_id, session=None):
         logging.debug("Returning a null value for the function.")
         return None
 
-# Function to lookup a JAMF mobile asset by id.
 def search_jamf_mobile(jamf_id, session=None):
+    """Retrieves a single mobile device from the JAMF instance by ID.
+
+    The JAMF instance is specified by the global variable ``jamfpro_base``
+
+    :param jamf_id: JAMF instance's unique ID value identifying this mobile
+        device.
+
+    :param session:
+        requests.Session object to use for this request. If none is provided,
+        one will be created for you.
+    """
     if session is None:
         session = requests.Session()
     api_url = "{}/JSSResource/mobiledevices/id/{}".format(jamfpro_base, jamf_id)
@@ -278,8 +312,20 @@ def search_jamf_mobile(jamf_id, session=None):
         logging.debug("Returning a null value for the function.")
         return None
 
-# Function to update the asset tag of computers in JAMF with an number passed from Snipe.
 def update_jamf_asset_tag(jamf_id, asset_tag, session=None):
+    """Updates the asset tag field on a single computer in JAMF.
+
+    The JAMF instance is specified by the global variable ``jamfpro_base``
+
+    :param jamf_id: JAMF instance's unique ID value identifying this computer.
+
+    :param asset_tag: The new value for the asset tag field for this computer
+        in the JAMF instance.
+
+    :param session:
+        requests.Session object to use for this request. If none is provided,
+        one will be created for you.
+    """
     if session is None:
         session = requests.Session()
     api_url = "{}/JSSResource/computers/id/{}".format(jamfpro_base, jamf_id)
@@ -303,8 +349,21 @@ def update_jamf_asset_tag(jamf_id, asset_tag, session=None):
         logging.warning('Got back an error response code:{} - {}'.format(response.status_code, response.content))
         return None
 
-# Function to update the asset tag of mobile devices in JAMF with an number passed from Snipe.
 def update_jamf_mobiledevice_asset_tag(jamf_id, asset_tag, session=None):
+    """Updates the asset tag field on a single mobile device in JAMF.
+
+    The JAMF instance is specified by the global variable ``jamfpro_base``
+
+    :param jamf_id: JAMF instance's unique ID value identifying this mobile
+        device.
+
+    :param asset_tag: The new value for the asset tag field for this mobile
+        device in the JAMF instance.
+
+    :param session:
+        requests.Session object to use for this request. If none is provided,
+        one will be created for you.
+    """
     if session is None:
         session = requests.Session()
     api_url = "{}/JSSResource/mobiledevices/id/{}".format(jamfpro_base, jamf_id)
@@ -328,8 +387,31 @@ def update_jamf_mobiledevice_asset_tag(jamf_id, asset_tag, session=None):
         logging.warning('Got back an error response code:{} - {}'.format(response.status_code, response.content))
         return None
 
-# Function to lookup a snipe asset by serial number.
 def search_snipe_asset(serial, session=None):
+    """Looks up an asset by its serial number in Snipe-IT.
+
+    The Snipe-IT instance is specified by the ``snipe_base`` global variable.
+
+    Snipe-IT does not enforce uniqueness of the serial number, so it may return
+    more than one asset for the search.
+
+    :returns: If a single match is found, a dict object representing the match
+        is returned.
+
+        If no match is found, the string ``"NoMatch"`` is returned.
+
+        If more than one match is found, the string ``"MultiMatch"`` is
+        returned.
+
+        If any error occurs during the request, the string ``"ERROR"`` is
+        returned.
+
+    :param serial: Serial number to look up in Snipe-IT.
+
+    :param session:
+        requests.Session object to use for this request. If none is provided,
+        one will be created for you.
+    """
     if session is None:
         session = requests.Session()
     api_url = '{}/api/v1/hardware/byserial/{}'.format(snipe_base, serial)
@@ -350,8 +432,19 @@ def search_snipe_asset(serial, session=None):
         logging.debug('{} - {}'.format(response.status_code, response.content))
         return "ERROR"
 
-# Function to get all the asset models
 def get_snipe_models(session=None):
+    """Looks up all of the asset models in Snipe-IT.
+
+    The Snipe-IT instance is specified by the ``snipe_base`` global variable.
+
+    Returns a dict object matching https://snipe-it.readme.io/reference#models
+
+    Exits the program on errors.
+
+    :param session:
+        requests.Session object to use for this request. If none is provided,
+        one will be created for you.
+    """
     if session is None:
         session = requests.Session()
     api_url = '{}/api/v1/models'.format(snipe_base)
@@ -380,8 +473,20 @@ def get_snipe_models(session=None):
         logging.error('When we tried to retreive a list of models, Snipe-IT responded with error status code:{} - {}'.format(response.status_code, response.content))
         raise SystemExit("Snipe models API endpoint failed.")
 
-# Recursive function returns all users in a Snipe Instance, 100 at a time.
 def get_snipe_users(previous=None, session=None):
+    """Get a list of all users in Snipe-IT.
+
+    The Snipe-IT instance is specified by the ``snipe_base`` global variable.
+
+    This function is recursive. Please call it without the ``previous``
+    argument, it will eventually return your list.
+
+    :param previous: List of users to append to in this run.
+
+    :param session:
+        requests.Session object to use for this request. If none is provided,
+        one will be created for you.
+    """
     if previous is None:
         previous = []
     if session is None:
@@ -403,8 +508,19 @@ def get_snipe_users(previous=None, session=None):
     else:
         return current
 
-# Function to search snipe for a user
 def get_snipe_user_id(username, session=None):
+    """Get a Snipe-IT user's unique identifier given their username.
+
+    The Snipe-IT instance is specified by the ``snipe_base`` global variable.
+
+    :param username: Username to search Snipe-IT for.
+
+    :param session:
+        requests.Session object to use for this request. If none is provided,
+        one will be created for you.
+
+    :returns: ``"id"`` value of the user object from Snipe-IT.
+    """
     if session is None:
         session = requests.Session()
     if username == '':
@@ -433,8 +549,19 @@ def get_snipe_user_id(username, session=None):
     except:
         return "NotFound"
 
-# Function that creates a new Snipe Model - not an asset - with a JSON payload
 def create_snipe_model(payload, session=None):
+    """Creates a new model in Snipe-IT.
+
+    The Snipe-IT instance is specified by the ``snipe_base`` global variable.
+
+    :param payload: JSON to send directly to the models endpoint in Snipe-IT.
+
+    :param session:
+        requests.Session object to use for this request. If none is provided,
+        one will be created for you.
+
+    :returns: True if the asset creation was successful, False if it was not.
+    """
     if session is None:
         session = requests.Session()
     api_url = '{}/api/v1/models'.format(snipe_base)
@@ -448,8 +575,22 @@ def create_snipe_model(payload, session=None):
         logging.warning('Error code: {} while trying to create a new model.'.format(response.status_code))
         return False
 
-# Function to create a new asset by passing array
 def create_snipe_asset(payload, session=None):
+    """Creates a new asset in Snipe-IT.
+
+    The Snipe-IT instance is specified by the ``snipe_base`` global variable.
+
+    :param payload: JSON to send directly to the models endpoint in Snipe-IT.
+
+    :param session:
+        requests.Session object to use for this request. If none is provided,
+        one will be created for you.
+
+    :returns:
+        A tuple of the format ``(status, response)`` where ``status`` is the
+        string ``"AssetCreated"`` and ``response`` is the requests.Response
+        object returned for the requst.
+    """
     if session is None:
         session = requests.Session()
     api_url = '{}/api/v1/hardware'.format(snipe_base)
@@ -463,8 +604,21 @@ def create_snipe_asset(payload, session=None):
         logging.error('Asset creation failed for asset {} with error {}'.format(payload['name'],response.text))
         return response
 
-# Function that updates a snipe asset with a JSON payload
 def update_snipe_asset(snipe_id, payload, session=None):
+    """Updates an existing asset in Snipe-IT.
+
+    The Snipe-IT instance is specified by the ``snipe_base`` global variable.
+
+    :param snipe_id: Unique identifier of the object to update in Snipe-IT.
+
+    :param payload: JSON to send directly to the models endpoint in Snipe-IT.
+
+    :param session:
+        requests.Session object to use for this request. If none is provided,
+        one will be created for you.
+
+    :returns: True if the update was successful, False if it was not.
+    """
     if session is None:
         session = requests.Session()
     api_url = '{}/api/v1/hardware/{}'.format(snipe_base, snipe_id)
@@ -486,8 +640,22 @@ def update_snipe_asset(snipe_id, payload, session=None):
         logging.warning('Whoops. Got an error status code while updating ID {}: {} - {}'.format(snipe_id, response.status_code, response.content))
         return False
 
-# Function that checks in an asset in snipe
 def checkin_snipe_asset(asset_id, session=None):
+    """Checks in a single asset in Snipe-IT, removing its assignee.
+
+    The Snipe-IT instance is specified by the ``snipe_base`` global variable.
+
+    :param asset_id: Unique identifier of the object to update in Snipe-IT.
+
+    :param session:
+        requests.Session object to use for this request. If none is provided,
+        one will be created for you.
+
+    :returns:
+        The string ``"CheckedOut"`` if the checkin was successful, the
+        ``requests.Response`` object returned by the request if the checkin was
+        not successful.
+    """
     if session is None:
         session = requests.Session()
     api_url = '{}/api/v1/hardware/{}/checkin'.format(snipe_base, asset_id)
@@ -503,8 +671,34 @@ def checkin_snipe_asset(asset_id, session=None):
     else:
         return response
 
-# Function that checks out an asset in snipe
 def checkout_snipe_asset(user, asset_id, checked_out_user=None, session=None):
+    """Checks out a single asset in Snipe-IT to the specified user.
+
+    The Snipe-IT instance is specified by the ``snipe_base`` global variable.
+
+    It is the caller's responsibility to provide the currently checked-out user
+    as the ``checked_out_user`` argument.
+
+    :param user: Username of the user to check this asset out to.
+
+    :param asset_id: Unique identifier of the object to update in Snipe-IT.
+
+    :param checked_out_user:
+        Unique identifier (``"id"``) of the user which this asset is checked
+        out to at call time, or ``"NewAsset"`` if this asset was just created.
+
+    :param session:
+        requests.Session object to use for this request. If none is provided,
+        one will be created for you.
+
+    :returns:
+        ``"NotFound"`` if the user with the given username does not exist.
+
+        ``"CheckedOut"`` if the asset was checked out successfully.
+
+        The ``requests.Response`` object returned by the checkout request if
+        it was not successful.
+    """
     if session is None:
         session = requests.Session()
     logging.debug('Asset {} is being checked out to {}'.format(user, asset_id))
@@ -543,6 +737,10 @@ def get_snipe_apple_manufacturer(session):
     """ Returns the integer ID of the "Apple" manufacturer in snipe-it.
 
     Raises ValueError if the "Apple" manufacturer is not found.
+
+    :param session:
+        requests.Session object to use for this request. If none is provided,
+        one will be created for you.
     """
     #TODO: Handle pagination of the /manufacturers endpoint
     logging.info("Searching for the manufacturer with the name 'Apple'")

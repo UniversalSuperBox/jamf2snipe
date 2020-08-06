@@ -381,7 +381,9 @@ def get_snipe_models(session=None):
         raise SystemExit("Snipe models API endpoint failed.")
 
 # Recursive function returns all users in a Snipe Instance, 100 at a time.
-def get_snipe_users(previous=[], session=None):
+def get_snipe_users(previous=None, session=None):
+    if previous is None:
+        previous = []
     if session is None:
         session = requests.Session()
     user_id_url = '{}/api/v1/users'.format(snipe_base)

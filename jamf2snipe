@@ -159,6 +159,7 @@ for key in config['computers-api-mapping']:
 ### Setup Some Functions ###
 SNIPE_API_COUNT = 0
 FIRST_SNIPE_CALL = None
+RATE_LIMIT_SNIPE = USER_ARGS.ratelimited
 
 def snipe_request_handler(r, *args, **kwargs): #pylint: disable=unused-argument,invalid-name
     """Handles rate limiting for the Snipe-IT server.
@@ -170,7 +171,7 @@ def snipe_request_handler(r, *args, **kwargs): #pylint: disable=unused-argument,
     global SNIPE_API_COUNT
     global FIRST_SNIPE_CALL
     global SNIPE_SESSION
-    if USER_ARGS.ratelimited:
+    if RATE_LIMIT_SNIPE:
         if '"messages":429' in r.text:
             logging.warning("Despite respecting the rate limit of Snipe, we've still been limited. Trying again after sleeping for 2 seconds.")
             time.sleep(2)
@@ -500,12 +501,18 @@ def get_snipe_users(previous=None, session=None):
         return get_snipe_users(previous=current, session=session)
     return current
 
-def get_snipe_user_id(username, session=None):
+def get_snipe_user_id(username, user_list, do_not_search, session=None):
     """Get a Snipe-IT user's unique identifier given their username.
 
     The Snipe-IT instance is specified by the ``SNIPE_BASE`` global variable.
 
     :param username: Username to search Snipe-IT for.
+
+    :param user_list: A list of users returned by get_snipe_users.
+
+    :param do_not_search:
+        Do not try to use the Snipe-IT user search to find the requested
+        username if we were completely unable to find them in user_dict.
 
     :param session:
         requests.Session object to use for this request. If none is provided,
@@ -518,12 +525,12 @@ def get_snipe_user_id(username, session=None):
     if username == '':
         return "NotFound"
     username = username.lower()
-    for user in SNIPE_USERS:
+    for user in user_list:
         for value in user.values():
             if str(value).lower() == username:
                 user_id = user['id']
                 return user_id
-    if USER_ARGS.users_no_search:
+    if do_not_search:
         logging.debug("No matches in SNIPE_USERS for %s, not querying the API for the next closest match since we've been told not to", username)
         return "NotFound"
     logging.debug('No matches in SNIPE_USERS for %s, querying the API for the next closest match', username)
@@ -660,7 +667,7 @@ def checkin_snipe_asset(asset_id, session=None):
         return "CheckedOut"
     return response
 
-def checkout_snipe_asset(user, asset_id, checked_out_user=None, session=None):
+def checkout_snipe_asset(user, asset_id, user_list, do_not_search, checked_out_user=None, session=None):
     """Checks out a single asset in Snipe-IT to the specified user.
 
     The Snipe-IT instance is specified by the ``SNIPE_BASE`` global variable.
@@ -671,6 +678,12 @@ def checkout_snipe_asset(user, asset_id, checked_out_user=None, session=None):
     :param user: Username of the user to check this asset out to.
 
     :param asset_id: Unique identifier of the object to update in Snipe-IT.
+
+    :param user_list: A list of users returned by get_snipe_users.
+
+    :param do_not_search:
+        Do not try to use the Snipe-IT user search to find the requested
+        username if we were completely unable to find them in user_dict.
 
     :param checked_out_user:
         Unique identifier (``"id"``) of the user which this asset is checked
@@ -691,7 +704,7 @@ def checkout_snipe_asset(user, asset_id, checked_out_user=None, session=None):
     if session is None:
         session = session_setup("snipe")
     logging.debug('Asset %s is being checked out to %s', user, asset_id)
-    user_id = get_snipe_user_id(user, session=session)
+    user_id = get_snipe_user_id(user, user_list, do_not_search, session=session)
     if user_id == 'NotFound':
         logging.info("User %s not found", user)
         return "NotFound"
@@ -932,7 +945,7 @@ for jamf_type in jamf_types:
                         logging.info("Couldn't find %s for this device in %s, not checking it out.", jamf_data_field, jamf_data_category)
                         continue
                     logging.info('Checking out new item %s to user %s', jamf['general']['name'], jamf[str(jamf_data_category)][str(jamf_data_field)])
-                    checkout_snipe_asset(jamf[jamf_data_category][jamf_data_field], new_snipe_asset[1].json()['payload']['id'], "NewAsset", session=SNIPE_SESSION)
+                    checkout_snipe_asset(jamf[jamf_data_category][jamf_data_field], new_snipe_asset[1].json()['payload']['id'], SNIPE_USERS, USER_ARGS.users_no_search, "NewAsset", session=SNIPE_SESSION)
 
         # Log an error if there's an issue, or more than once match.
         elif snipe == 'MultiMatch':
@@ -998,7 +1011,7 @@ for jamf_type in jamf_types:
                         if jamf_data_field not in jamf[jamf_data_category]:
                             logging.info("Couldn't find %s for this device in %s, not checking it out.", jamf_data_field, jamf_data_category)
                             continue
-                        checkout_snipe_asset(jamf[jamf_data_category][jamf_data_field], snipe_id, snipe['rows'][0]['assigned_to'], session=SNIPE_SESSION)
+                        checkout_snipe_asset(jamf[jamf_data_category][jamf_data_field], snipe_id, SNIPE_USERS, USER_ARGS.users_no_search, snipe['rows'][0]['assigned_to'], session=SNIPE_SESSION)
                     else:
                         logging.info("Can't checkout %s since the status isn't set to deployable", jamf['general']['name'])
 

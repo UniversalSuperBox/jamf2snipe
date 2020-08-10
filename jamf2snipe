@@ -156,18 +156,21 @@ for key in config['computers-api-mapping']:
         logging.error("Found invalid subset: %s in the settings.conf file.\nThis is not in the acceptable list of subsets. Check your settings.conf\n Valid subsets are: %s", jamfsplit[0], ', '.join(validsubset))
         raise SystemExit("Invalid Subset found in settings.conf")
 
-JAMF_SESSION = requests.Session()
-SNIPE_SESSION = requests.Session()
-
 ### Setup Some Functions ###
 snipe_api_count = 0
 first_snipe_call = None
-# This function is run every time a request is made, handles rate limiting for Snipe IT.
-def request_handler(r, *args, **kwargs):
+
+def snipe_request_handler(r, *args, **kwargs): #pylint: disable=unused-argument,invalid-name
+    """Handles rate limiting for the Snipe-IT server.
+
+    This function should be passed as a response hook on every request made to
+    the Snipe-IT server. The easiest way to ensure this happens is to use the
+    requests.Session made for Snipe-IT requests.
+    """
     global snipe_api_count
     global first_snipe_call
     global SNIPE_SESSION
-    if (snipe_base in r.url) and user_args.ratelimited:
+    if user_args.ratelimited:
         if '"messages":429' in r.text:
             logging.warning("Despite respecting the rate limit of Snipe, we've still been limited. Trying again after sleeping for 2 seconds.")
             time.sleep(2)
@@ -189,6 +192,34 @@ def request_handler(r, *args, **kwargs):
         raise SystemExit("We've been rate limited. Use option -r to respect the built in Snipe IT API rate limit of 120/minute.")
     return r
 
+def jamf_request_handler(r, *args, **kwargs): #pylint: disable=unused-argument,invalid-name
+    """Handles rate limiting for the JAMF server.
+
+    This function should be passed as a response hook on every request made to
+    the JAMF server. The easiest way to ensure this happens is to use the
+    requests.Session made for JAMF requests.
+    """
+    if r.status_code != 200 and b'policies.ratelimit.QuotaViolation' in r.content:
+        # This case should only occur with JAMF's developer portal
+        logging.warning('JAMFPro Ratelimit exceeded - error code %s. Pausing for 75 seconds.', r.status_code)
+        time.sleep(75)
+        logging.info("Finished waiting. Retrying lookup...")
+        newresponse = JAMF_SESSION.send(r.request)
+        return newresponse
+    return r
+
+def snipe_session_setup():
+    """Returns a requests.Session object set up for making requests to Snipe"""
+    session = requests.Session()
+    session.hooks["response"].append(snipe_request_handler)
+    return session
+
+def jamf_session_setup():
+    """Returns a requests.Session object set up for making requests to JAMF"""
+    session = requests.Session()
+    session.hooks["response"].append(jamf_request_handler)
+    return session
+
 def get_jamf_computers(session=None):
     """Retrieves a list of all computers from the JAMF instance.
 
@@ -199,24 +230,16 @@ def get_jamf_computers(session=None):
         one will be created for you.
     """
     if session is None:
-        session = requests.Session()
+        session = jamf_session_setup()
     api_url = '{0}/JSSResource/computers'.format(jamfpro_base)
     logging.debug('Calling for JAMF computers against: %s\n The username, passwords, and headers for this GET requestcan be found near the beginning of the output.', api_url)
-    response = session.get(api_url, auth=(jamf_api_user, jamf_api_password), headers=jamfheaders, verify=user_args.do_not_verify_ssl, hooks={'response': request_handler})
+    response = session.get(api_url, auth=(jamf_api_user, jamf_api_password), headers=jamfheaders, verify=user_args.do_not_verify_ssl)
     if response.status_code == 200:
         logging.debug("Got back a valid 200 response code.")
         return response.json()
-    elif b'policies.ratelimit.QuotaViolation' in response.content:
-        logging.info('JAMFPro responded with error code: %s - Policy Ratelimit Quota Violation - when we tried to get a list of computers Waiting a bit to retry the lookup.', response)
-        logging.warning('JAMFPro Ratelimit exceeded: pausing ')
-        time.sleep(75)
-        logging.info("Finished waiting. Retrying lookup...")
-        newresponse = get_jamf_computers(session=JAMF_SESSION)
-        return newresponse
-    else:
-        logging.warning('Received an invalid status code when trying to retreive JAMF Device list:%s - %s', response.status_code, response.content)
-        logging.debug("Returning a null value for the function.")
-        return None
+    logging.warning('Received an invalid status code when trying to retreive JAMF Device list:%s - %s', response.status_code, response.content)
+    logging.debug("Returning a null value for the function.")
+    return None
 
 def get_jamf_mobiles(session=None):
     """Retrieves a list of all mobile devices from the JAMF instance.
@@ -229,24 +252,16 @@ def get_jamf_mobiles(session=None):
         provided.
     """
     if session is None:
-        session = requests.Session()
+        session = jamf_session_setup()
     api_url = '{0}/JSSResource/mobiledevices'.format(jamfpro_base)
     logging.debug('Calling for JAMF mobiles against: %s\n The username, passwords, and headers for this GET requestcan be found near the beginning of the output.', api_url)
-    response = session.get(api_url, auth=(jamf_api_user, jamf_api_password), headers=jamfheaders, verify=user_args.do_not_verify_ssl, hooks={'response': request_handler})
+    response = session.get(api_url, auth=(jamf_api_user, jamf_api_password), headers=jamfheaders, verify=user_args.do_not_verify_ssl)
     if response.status_code == 200:
         logging.debug("Got back a valid 200 response code.")
         return response.json()
-    elif b'policies.ratelimit.QuotaViolation' in response.content:
-        logging.info('JAMFPro responded with error code: %s - Policy Ratelimit Quota Violation - when we tried to get a list of mobiles Waiting a bit to retry the lookup.', response)
-        logging.warning('JAMFPro Ratelimit exceeded: pausing ')
-        time.sleep(75)
-        logging.info("Finished waiting. Retrying lookup...")
-        newresponse = get_jamf_computers(session=session)
-        return newresponse
-    else:
-        logging.warning('Received an invalid status code when trying to retreive JAMF Device list:%s - %s', response.status_code, response.content)
-        logging.debug("Returning a null value for the function.")
-        return None
+    logging.warning('Received an invalid status code when trying to retreive JAMF Device list:%s - %s', response.status_code, response.content)
+    logging.debug("Returning a null value for the function.")
+    return None
 
 def search_jamf_asset(jamf_id, session=None):
     """Retrieves a single computer from the JAMF instance by ID.
@@ -260,25 +275,17 @@ def search_jamf_asset(jamf_id, session=None):
         one will be created for you.
     """
     if session is None:
-        session = requests.Session()
+        session = jamf_session_setup()
     api_url = "{}/JSSResource/computers/id/{}".format(jamfpro_base, jamf_id)
-    response = session.get(api_url, auth=(jamf_api_user, jamf_api_password), headers=jamfheaders, verify=user_args.do_not_verify_ssl, hooks={'response': request_handler})
+    response = session.get(api_url, auth=(jamf_api_user, jamf_api_password), headers=jamfheaders, verify=user_args.do_not_verify_ssl)
     if response.status_code == 200:
         logging.debug("Got back a valid 200 response code.")
         jsonresponse = response.json()
         logging.debug("Returning: %s", jsonresponse['computer'])
         return jsonresponse['computer']
-    elif b'policies.ratelimit.QuotaViolation' in response.content:
-        logging.info('JAMFPro responded with error code: %s - Policy Ratelimit Quota Violation - when we tried to look up id: %s Waiting a bit to retry the lookup.', response, jamf_id)
-        logging.warning('JAMFPro Ratelimit exceeded: pausing ')
-        time.sleep(75)
-        logging.info("Finished waiting. Retrying lookup...")
-        newresponse = search_jamf_asset(jamf_id, session=session)
-        return newresponse
-    else:
-        logging.warning('JAMFPro responded with error code:%s when we tried to look up id: %s', response, jamf_id)
-        logging.debug("Returning a null value for the function.")
-        return None
+    logging.warning('JAMFPro responded with error code:%s when we tried to look up id: %s', response, jamf_id)
+    logging.debug("Returning a null value for the function.")
+    return None
 
 def search_jamf_mobile(jamf_id, session=None):
     """Retrieves a single mobile device from the JAMF instance by ID.
@@ -293,25 +300,17 @@ def search_jamf_mobile(jamf_id, session=None):
         one will be created for you.
     """
     if session is None:
-        session = requests.Session()
+        session = jamf_session_setup()
     api_url = "{}/JSSResource/mobiledevices/id/{}".format(jamfpro_base, jamf_id)
-    response = session.get(api_url, auth=(jamf_api_user, jamf_api_password), headers=jamfheaders, verify=user_args.do_not_verify_ssl, hooks={'response': request_handler})
+    response = session.get(api_url, auth=(jamf_api_user, jamf_api_password), headers=jamfheaders, verify=user_args.do_not_verify_ssl)
     if response.status_code == 200:
         logging.debug("Got back a valid 200 response code.")
         jsonresponse = response.json()
         logging.debug("Returning: %s", jsonresponse['mobile_device'])
         return jsonresponse['mobile_device']
-    elif b'policies.ratelimit.QuotaViolation' in response.content:
-        logging.info('JAMFPro responded with error code: %s - Policy Ratelimit Quota Violation - when we tried to look up id: %s Waiting a bit to retry the lookup.', response, jamf_id)
-        logging.warning('JAMFPro Ratelimit exceeded: pausing ')
-        time.sleep(75)
-        logging.info("Finished waiting. Retyring lookup...")
-        newresponse = search_jamf_asset(jamf_id, session=session)
-        return newresponse
-    else:
-        logging.warning('JAMFPro responded with error code:%s when we tried to look up id: %s', response, jamf_id)
-        logging.debug("Returning a null value for the function.")
-        return None
+    logging.warning('JAMFPro responded with error code:%s when we tried to look up id: %s', response, jamf_id)
+    logging.debug("Returning a null value for the function.")
+    return None
 
 def update_jamf_asset_tag(jamf_id, asset_tag, session=None):
     """Updates the asset tag field on a single computer in JAMF.
@@ -328,27 +327,19 @@ def update_jamf_asset_tag(jamf_id, asset_tag, session=None):
         one will be created for you.
     """
     if session is None:
-        session = requests.Session()
+        session = jamf_session_setup()
     api_url = "{}/JSSResource/computers/id/{}".format(jamfpro_base, jamf_id)
     payload = """<?xml version="1.0" encoding="UTF-8"?><computer><general><id>{}</id><asset_tag>{}</asset_tag></general></computer>""".format(jamf_id, asset_tag)
     logging.debug('Making Get request against: %s\nPayload for the PUT request is: %s\nThe username, password, and headers can be found near the beginning of the output.', api_url, payload)
-    response = session.put(api_url, auth=(jamf_api_user, jamf_api_password), data=payload, headers=jamfheaders, verify=user_args.do_not_verify_ssl, hooks={'response': request_handler})
+    response = session.put(api_url, auth=(jamf_api_user, jamf_api_password), data=payload, headers=jamfheaders, verify=user_args.do_not_verify_ssl)
     if response.status_code == 201:
         logging.debug("Got a 201 response. Returning: True")
         return True
-    elif b'policies.ratelimit.QuotaViolation' in response.content:
-        logging.info('JAMFPro responded with error code: %s - Policy Ratelimit Quota Violation - when we tried to look up id: %s Waiting a bit to retry the lookup.', response, jamf_id)
-        logging.warning('JAMFPro Ratelimit exceeded: pausing ')
-        time.sleep(75)
-        logging.info("Finished waiting. Retrying update...")
-        newresponse = update_jamf_asset_tag(jamf_id, asset_tag, session=session)
-        return newresponse
     if response.status_code == 200:
         logging.debug("Got a 200 response code. Returning the response: %s", response)
         return response.json()
-    else:
-        logging.warning('Got back an error response code:%s - %s', response.status_code, response.content)
-        return None
+    logging.warning('Got back an error response code:%s - %s', response.status_code, response.content)
+    return None
 
 def update_jamf_mobiledevice_asset_tag(jamf_id, asset_tag, session=None):
     """Updates the asset tag field on a single mobile device in JAMF.
@@ -366,27 +357,19 @@ def update_jamf_mobiledevice_asset_tag(jamf_id, asset_tag, session=None):
         one will be created for you.
     """
     if session is None:
-        session = requests.Session()
+        session = jamf_session_setup()
     api_url = "{}/JSSResource/mobiledevices/id/{}".format(jamfpro_base, jamf_id)
     payload = """<?xml version="1.0" encoding="UTF-8"?><mobile_device><general><id>{}</id><asset_tag>{}</asset_tag></general></mobile_device>""".format(jamf_id, asset_tag)
     logging.debug('Making Get request against: %s\nPayload for the PUT request is: %s\nThe username, password, and headers can be found near the beginning of the output.', api_url, payload)
-    response = session.put(api_url, auth=(jamf_api_user, jamf_api_password), data=payload, headers=jamfheaders, verify=user_args.do_not_verify_ssl, hooks={'response': request_handler})
+    response = session.put(api_url, auth=(jamf_api_user, jamf_api_password), data=payload, headers=jamfheaders, verify=user_args.do_not_verify_ssl)
     if response.status_code == 201:
         logging.debug("Got a 201 response. Returning: True")
         return True
-    elif b'policies.ratelimit.QuotaViolation' in response.content:
-        logging.info('JAMFPro responded with error code: %s - Policy Ratelimit Quota Violation - when we tried to look up id: %s Waiting a bit to retry the lookup.', response, jamf_id)
-        logging.warning('JAMFPro Ratelimit exceeded: pausing ')
-        time.sleep(75)
-        logging.info("Finished waiting. Retrying update...")
-        newresponse = update_jamf_mobiledevice_asset_tag(jamf_id, asset_tag, session=session)
-        return newresponse
     if response.status_code == 200:
         logging.debug("Got a 200 response code. Returning the response: %s", response)
         return response.json()
-    else:
-        logging.warning('Got back an error response code:%s - %s', response.status_code, response.content)
-        return None
+    logging.warning('Got back an error response code:%s - %s', response.status_code, response.content)
+    return None
 
 def search_snipe_asset(serial, session=None):
     """Looks up an asset by its serial number in Snipe-IT.
@@ -414,9 +397,7 @@ def search_snipe_asset(serial, session=None):
         one will be created for you.
     """
     if session is None:
-        session = requests.Session()
-    api_url = '{}/api/v1/hardware/byserial/{}'.format(snipe_base, serial)
-    response = session.get(api_url, headers=snipeheaders, verify=user_args.do_not_verify_ssl, hooks={'response': request_handler})
+        session = snipe_session_setup()
     if response.status_code == 200:
         jsonresponse = response.json()
         # Check to make sure there's actually a result
@@ -447,10 +428,9 @@ def get_snipe_models(session=None):
         one will be created for you.
     """
     if session is None:
-        session = requests.Session()
-    api_url = '{}/api/v1/models'.format(snipe_base)
+        session = snipe_session_setup()
     logging.debug('Calling against: %s', api_url)
-    response = session.get(api_url, headers=snipeheaders, verify=user_args.do_not_verify_ssl, hooks={'response': request_handler})
+    response = session.get(api_url, headers=snipeheaders, verify=user_args.do_not_verify_ssl)
     if response.status_code == 200:
         jsonresponse = response.json()
         logging.info("Got a valid response that should have %s models.", jsonresponse['total'])
@@ -459,7 +439,7 @@ def get_snipe_models(session=None):
         else:
             logging.info("We didn't get enough results so we need to get them again.")
             api_url = '{}/api/v1/models?limit={}'.format(snipe_base, jsonresponse['total'])
-            newresponse = session.get(api_url, headers=snipeheaders, verify=user_args.do_not_verify_ssl, hooks={'response': request_handler})
+            newresponse = session.get(api_url, headers=snipeheaders, verify=user_args.do_not_verify_ssl)
             if response.status_code == 200:
                 newjsonresponse = newresponse.json()
                 if newjsonresponse['total'] == len(newjsonresponse['rows']) :
@@ -491,14 +471,14 @@ def get_snipe_users(previous=None, session=None):
     if previous is None:
         previous = []
     if session is None:
-        session = requests.Session()
+        session = snipe_session_setup()
     user_id_url = '{}/api/v1/users'.format(snipe_base)
     payload = {
         'limit': 100,
         'offset': len(previous)
     }
     logging.debug('The payload for the snipe users GET is %s', payload)
-    response = session.get(user_id_url, headers=snipeheaders, json=payload, hooks={'response': request_handler})
+    response = session.get(user_id_url, headers=snipeheaders, json=payload)
     response_json = response.json()
     current = response_json['rows']
     if len(previous) != 0:
@@ -522,7 +502,7 @@ def get_snipe_user_id(username, session=None):
     :returns: ``"id"`` value of the user object from Snipe-IT.
     """
     if session is None:
-        session = requests.Session()
+        session = snipe_session_setup()
     if username == '':
         return "NotFound"
     username = username.lower()
@@ -543,7 +523,7 @@ def get_snipe_user_id(username, session=None):
         'order':'asc'
     }
     logging.debug('The payload for the snipe user search is: %s', payload)
-    response = session.get(user_id_url, headers=snipeheaders, json=payload, verify=user_args.do_not_verify_ssl, hooks={'response': request_handler})
+    response = session.get(user_id_url, headers=snipeheaders, json=payload, verify=user_args.do_not_verify_ssl)
     try:
         return response.json()['rows'][0]['id']
     except:
@@ -563,10 +543,10 @@ def create_snipe_model(payload, session=None):
     :returns: True if the asset creation was successful, False if it was not.
     """
     if session is None:
-        session = requests.Session()
+        session = snipe_session_setup()
     api_url = '{}/api/v1/models'.format(snipe_base)
     logging.debug('Calling to create new snipe model type against: %s\nThe payload for the POST request is:%s\nThe request headers can be found near the start of the output.', api_url, payload)
-    response = session.post(api_url, headers=snipeheaders, json=payload, verify=user_args.do_not_verify_ssl, hooks={'response': request_handler})
+    response = session.post(api_url, headers=snipeheaders, json=payload, verify=user_args.do_not_verify_ssl)
     if response.status_code == 200:
         jsonresponse = response.json()
         modelnumbers[jsonresponse['payload']['model_number']] = jsonresponse['payload']['id']
@@ -592,10 +572,10 @@ def create_snipe_asset(payload, session=None):
         object returned for the requst.
     """
     if session is None:
-        session = requests.Session()
+        session = snipe_session_setup()
     api_url = '{}/api/v1/hardware'.format(snipe_base)
     logging.debug('Calling to create a new asset against: %s\nThe payload for the POST request is:%s\nThe request headers can be found near the start of the output.', api_url, payload)
-    response = session.post(api_url, headers=snipeheaders, json=payload, verify=user_args.do_not_verify_ssl, hooks={'response': request_handler})
+    response = session.post(api_url, headers=snipeheaders, json=payload, verify=user_args.do_not_verify_ssl)
     logging.debug(response.text)
     if response.status_code == 200:
         logging.debug("Got back status code: 200 - %s",response.content)
@@ -620,10 +600,10 @@ def update_snipe_asset(snipe_id, payload, session=None):
     :returns: True if the update was successful, False if it was not.
     """
     if session is None:
-        session = requests.Session()
+        session = snipe_session_setup()
     api_url = '{}/api/v1/hardware/{}'.format(snipe_base, snipe_id)
     logging.debug('The payload for the snipe update is: %s', payload)
-    response = session.patch(api_url, headers=snipeheaders, json=payload, verify=user_args.do_not_verify_ssl, hooks={'response': request_handler})
+    response = session.patch(api_url, headers=snipeheaders, json=payload, verify=user_args.do_not_verify_ssl)
     # Verify that the payload updated properly.
     goodupdate = True
     if response.status_code == 200:
@@ -657,13 +637,13 @@ def checkin_snipe_asset(asset_id, session=None):
         not successful.
     """
     if session is None:
-        session = requests.Session()
+        session = snipe_session_setup()
     api_url = '{}/api/v1/hardware/{}/checkin'.format(snipe_base, asset_id)
     payload = {
         'note':'checked in by script from Jamf'
     }
     logging.debug('The payload for the snipe checkin is: %s', payload)
-    response = session.post(api_url, headers=snipeheaders, json=payload, verify=user_args.do_not_verify_ssl, hooks={'response': request_handler})
+    response = session.post(api_url, headers=snipeheaders, json=payload, verify=user_args.do_not_verify_ssl)
     logging.debug('The response from Snipe IT is: %s', response.json())
     if response.status_code == 200:
         logging.debug("Got back status code: 200 - %s", response.content)
@@ -699,7 +679,7 @@ def checkout_snipe_asset(user, asset_id, checked_out_user=None, session=None):
         it was not successful.
     """
     if session is None:
-        session = requests.Session()
+        session = snipe_session_setup()
     logging.debug('Asset %s is being checked out to %s', user, asset_id)
     user_id = get_snipe_user_id(user, session=session)
     if user_id == 'NotFound':
@@ -723,7 +703,7 @@ def checkout_snipe_asset(user, asset_id, checked_out_user=None, session=None):
         'note':'Assignment made automatically, via script from Jamf.'
     }
     logging.debug('The payload for the snipe checkin is: %s', payload)
-    response = session.post(api_url, headers=snipeheaders, json=payload, verify=user_args.do_not_verify_ssl, hooks={'response': request_handler})
+    response = session.post(api_url, headers=snipeheaders, json=payload, verify=user_args.do_not_verify_ssl)
     logging.debug('The response from Snipe IT is: %s', response.json())
     if response.status_code == 200:
         logging.debug("Got back status code: 200 - %s", response.content)
@@ -744,7 +724,7 @@ def get_snipe_apple_manufacturer(session):
     #TODO: Handle pagination of the /manufacturers endpoint
     logging.info("Searching for the manufacturer with the name 'Apple'")
     api_url = '{}/api/v1/manufacturers'.format(snipe_base)
-    r = session.get(api_url, headers=snipeheaders, verify=user_args.do_not_verify_ssl, hooks={'response': request_handler})
+    r = session.get(api_url, headers=snipeheaders, verify=user_args.do_not_verify_ssl,)
     for manufacturer in r.json()["rows"]:
         if manufacturer["name"].casefold() == "apple":
             manufacturer_id = manufacturer["id"]
@@ -758,14 +738,18 @@ def get_snipe_apple_manufacturer(session):
 logging.info("SSL Verification is set to: %s", user_args.do_not_verify_ssl)
 
 # Do some tests to see if the hosts are up.
+
+JAMF_SESSION = jamf_session_setup()
+SNIPE_SESSION = snipe_session_setup()
+
 logging.info("Running tests to see if hosts are up.")
 try:
-    SNIPE_UP = True if SNIPE_SESSION.get(snipe_base, verify=user_args.do_not_verify_ssl, hooks={'response': request_handler}).status_code == 200 else False
+    SNIPE_UP = True if SNIPE_SESSION.get(snipe_base, verify=user_args.do_not_verify_ssl, hooks={'response': snipe_request_handler}).status_code == 200 else False
 except Exception as e:
     logging.exception(e)
     SNIPE_UP = False
 try:
-    JAMF_UP = True if JAMF_SESSION.get(jamfpro_base, verify=user_args.do_not_verify_ssl, hooks={'response': request_handler}).status_code in (200, 401) else False
+    JAMF_UP = True if JAMF_SESSION.get(jamfpro_base, verify=user_args.do_not_verify_ssl).status_code in (200, 401) else False
 except Exception as e:
     logging.exception(e)
     JAMF_UP = False

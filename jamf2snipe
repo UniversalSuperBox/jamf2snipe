@@ -61,7 +61,7 @@ runtimeargs.add_argument("-v", "--verbose", help="Sets the logging level to INFO
 runtimeargs.add_argument("--dryrun", help="This checks your config and tries to contact both the JAMFPro and Snipe-it instances, but exits before updating or syncing any assets.", action="store_true")
 runtimeargs.add_argument("-d", "--debug", help="Sets logging to include additional DEBUG messages.", action="store_true")
 runtimeargs.add_argument("--do_not_update_jamf", help="Does not update Jamf with the asset tags stored in Snipe.", action="store_false")
-runtimeargs.add_argument('--do_not_verify_ssl', help="Skips SSL verification for all requests. Helpful when you use self-signed certificate.", action="store_false")
+runtimeargs.add_argument('--do_not_verify_ssl', help="Skips SSL verification for all requests. Helpful when you use self-signed certificate.", action="store_true")
 runtimeargs.add_argument("-r", "--ratelimited", help="Puts a half second delay between Snipe IT API calls to adhere to the standard 120/minute rate limit", action="store_true")
 runtimeargs.add_argument("-f", "--force", help="Updates the Snipe asset with information from Jamf every time, despite what the timestamps indicate.", action="store_true")
 user_opts = runtimeargs.add_mutually_exclusive_group()
@@ -208,16 +208,25 @@ def jamf_request_handler(r, *args, **kwargs): #pylint: disable=unused-argument,i
         return newresponse
     return r
 
-def snipe_session_setup():
-    """Returns a requests.Session object set up for making requests to Snipe"""
-    session = requests.Session()
-    session.hooks["response"].append(snipe_request_handler)
-    return session
+def session_setup(service, verify_ssl=True):
+    """Returns a requests.Session object set up for making requests to a service
 
-def jamf_session_setup():
-    """Returns a requests.Session object set up for making requests to JAMF"""
+    :param service:
+        "snipe" or "jamf", determines whether the session is set up for
+        querying Snipe-IT or JAMF, respectively.
+
+    :param verify_ssl:
+        Whether the created session should verify SSL/TLS certificates or not.
+        See https://requests.readthedocs.io/en/master/api/#requests.Session.verify
+    """
     session = requests.Session()
-    session.hooks["response"].append(jamf_request_handler)
+    if service == "snipe":
+        session.hooks["response"].append(snipe_request_handler)
+    elif service == "jamf":
+        session.hooks["response"].append(jamf_request_handler)
+    else:
+        raise ValueError("Incorrect service specified")
+    session.verify = verify_ssl
     return session
 
 def get_jamf_computers(session=None):
@@ -230,10 +239,10 @@ def get_jamf_computers(session=None):
         one will be created for you.
     """
     if session is None:
-        session = jamf_session_setup()
+        session = session_setup("jamf")
     api_url = '{0}/JSSResource/computers'.format(JAMF_BASE)
     logging.debug('Calling for JAMF computers against: %s\n The username, passwords, and headers for this GET requestcan be found near the beginning of the output.', api_url)
-    response = session.get(api_url, auth=(JAMF_API_USER, JAMF_API_PASSWORD), headers=JAMF_HEADERS, verify=USER_ARGS.do_not_verify_ssl)
+    response = session.get(api_url, auth=(JAMF_API_USER, JAMF_API_PASSWORD), headers=JAMF_HEADERS)
     if response.status_code == 200:
         logging.debug("Got back a valid 200 response code.")
         return response.json()
@@ -252,10 +261,10 @@ def get_jamf_mobiles(session=None):
         provided.
     """
     if session is None:
-        session = jamf_session_setup()
+        session = session_setup("jamf")
     api_url = '{0}/JSSResource/mobiledevices'.format(JAMF_BASE)
     logging.debug('Calling for JAMF mobiles against: %s\n The username, passwords, and headers for this GET requestcan be found near the beginning of the output.', api_url)
-    response = session.get(api_url, auth=(JAMF_API_USER, JAMF_API_PASSWORD), headers=JAMF_HEADERS, verify=USER_ARGS.do_not_verify_ssl)
+    response = session.get(api_url, auth=(JAMF_API_USER, JAMF_API_PASSWORD), headers=JAMF_HEADERS)
     if response.status_code == 200:
         logging.debug("Got back a valid 200 response code.")
         return response.json()
@@ -275,9 +284,9 @@ def search_jamf_asset(jamf_id, session=None):
         one will be created for you.
     """
     if session is None:
-        session = jamf_session_setup()
+        session = session_setup("jamf")
     api_url = "{}/JSSResource/computers/id/{}".format(JAMF_BASE, jamf_id)
-    response = session.get(api_url, auth=(JAMF_API_USER, JAMF_API_PASSWORD), headers=JAMF_HEADERS, verify=USER_ARGS.do_not_verify_ssl)
+    response = session.get(api_url, auth=(JAMF_API_USER, JAMF_API_PASSWORD), headers=JAMF_HEADERS)
     if response.status_code == 200:
         logging.debug("Got back a valid 200 response code.")
         jsonresponse = response.json()
@@ -300,9 +309,9 @@ def search_jamf_mobile(jamf_id, session=None):
         one will be created for you.
     """
     if session is None:
-        session = jamf_session_setup()
+        session = session_setup("jamf")
     api_url = "{}/JSSResource/mobiledevices/id/{}".format(JAMF_BASE, jamf_id)
-    response = session.get(api_url, auth=(JAMF_API_USER, JAMF_API_PASSWORD), headers=JAMF_HEADERS, verify=USER_ARGS.do_not_verify_ssl)
+    response = session.get(api_url, auth=(JAMF_API_USER, JAMF_API_PASSWORD), headers=JAMF_HEADERS)
     if response.status_code == 200:
         logging.debug("Got back a valid 200 response code.")
         jsonresponse = response.json()
@@ -327,11 +336,11 @@ def update_jamf_asset_tag(jamf_id, asset_tag, session=None):
         one will be created for you.
     """
     if session is None:
-        session = jamf_session_setup()
+        session = session_setup("jamf")
     api_url = "{}/JSSResource/computers/id/{}".format(JAMF_BASE, jamf_id)
     payload = """<?xml version="1.0" encoding="UTF-8"?><computer><general><id>{}</id><asset_tag>{}</asset_tag></general></computer>""".format(jamf_id, asset_tag)
     logging.debug('Making Get request against: %s\nPayload for the PUT request is: %s\nThe username, password, and headers can be found near the beginning of the output.', api_url, payload)
-    response = session.put(api_url, auth=(JAMF_API_USER, JAMF_API_PASSWORD), data=payload, headers=JAMF_HEADERS, verify=USER_ARGS.do_not_verify_ssl)
+    response = session.put(api_url, auth=(JAMF_API_USER, JAMF_API_PASSWORD), data=payload, headers=JAMF_HEADERS)
     if response.status_code == 201:
         logging.debug("Got a 201 response. Returning: True")
         return True
@@ -357,11 +366,11 @@ def update_jamf_mobiledevice_asset_tag(jamf_id, asset_tag, session=None):
         one will be created for you.
     """
     if session is None:
-        session = jamf_session_setup()
+        session = session_setup("jamf")
     api_url = "{}/JSSResource/mobiledevices/id/{}".format(JAMF_BASE, jamf_id)
     payload = """<?xml version="1.0" encoding="UTF-8"?><mobile_device><general><id>{}</id><asset_tag>{}</asset_tag></general></mobile_device>""".format(jamf_id, asset_tag)
     logging.debug('Making Get request against: %s\nPayload for the PUT request is: %s\nThe username, password, and headers can be found near the beginning of the output.', api_url, payload)
-    response = session.put(api_url, auth=(JAMF_API_USER, JAMF_API_PASSWORD), data=payload, headers=JAMF_HEADERS, verify=USER_ARGS.do_not_verify_ssl)
+    response = session.put(api_url, auth=(JAMF_API_USER, JAMF_API_PASSWORD), data=payload, headers=JAMF_HEADERS)
     if response.status_code == 201:
         logging.debug("Got a 201 response. Returning: True")
         return True
@@ -397,9 +406,9 @@ def search_snipe_asset(serial, session=None):
         one will be created for you.
     """
     if session is None:
-        session = snipe_session_setup()
+        session = session_setup("snipe")
     api_url = '{}/api/v1/hardware/byserial/{}'.format(SNIPE_BASE, serial)
-    response = session.get(api_url, headers=SNIPE_HEADERS, verify=USER_ARGS.do_not_verify_ssl)
+    response = session.get(api_url, headers=SNIPE_HEADERS)
     if response.status_code == 200:
         jsonresponse = response.json()
         # Check to make sure there's actually a result
@@ -430,10 +439,10 @@ def get_snipe_models(session=None):
         one will be created for you.
     """
     if session is None:
-        session = snipe_session_setup()
+        session = session_setup("snipe")
     api_url = '{}/api/v1/models'.format(SNIPE_BASE)
     logging.debug('Calling against: %s', api_url)
-    response = session.get(api_url, headers=SNIPE_HEADERS, verify=USER_ARGS.do_not_verify_ssl)
+    response = session.get(api_url, headers=SNIPE_HEADERS)
     if response.status_code == 200:
         jsonresponse = response.json()
         logging.info("Got a valid response that should have %s models.", jsonresponse['total'])
@@ -442,7 +451,7 @@ def get_snipe_models(session=None):
         else:
             logging.info("We didn't get enough results so we need to get them again.")
             api_url = '{}/api/v1/models?limit={}'.format(SNIPE_BASE, jsonresponse['total'])
-            newresponse = session.get(api_url, headers=SNIPE_HEADERS, verify=USER_ARGS.do_not_verify_ssl)
+            newresponse = session.get(api_url, headers=SNIPE_HEADERS)
             if response.status_code == 200:
                 newjsonresponse = newresponse.json()
                 if newjsonresponse['total'] == len(newjsonresponse['rows']):
@@ -474,7 +483,7 @@ def get_snipe_users(previous=None, session=None):
     if previous is None:
         previous = []
     if session is None:
-        session = snipe_session_setup()
+        session = session_setup("snipe")
     user_id_url = '{}/api/v1/users'.format(SNIPE_BASE)
     payload = {
         'limit': 100,
@@ -505,7 +514,7 @@ def get_snipe_user_id(username, session=None):
     :returns: ``"id"`` value of the user object from Snipe-IT.
     """
     if session is None:
-        session = snipe_session_setup()
+        session = session_setup("snipe")
     if username == '':
         return "NotFound"
     username = username.lower()
@@ -526,7 +535,7 @@ def get_snipe_user_id(username, session=None):
         'order':'asc'
     }
     logging.debug('The payload for the snipe user search is: %s', payload)
-    response = session.get(user_id_url, headers=SNIPE_HEADERS, json=payload, verify=USER_ARGS.do_not_verify_ssl)
+    response = session.get(user_id_url, headers=SNIPE_HEADERS, json=payload)
     try:
         return response.json()['rows'][0]['id']
     except:
@@ -548,10 +557,10 @@ def create_snipe_model(payload, session=None):
     :raises ValueError: Snipe-IT returned a status code other than 200 OK.
     """
     if session is None:
-        session = snipe_session_setup()
+        session = session_setup("snipe")
     api_url = '{}/api/v1/models'.format(SNIPE_BASE)
     logging.debug('Calling to create new snipe model type against: %s\nThe payload for the POST request is:%s\nThe request headers can be found near the start of the output.', api_url, payload)
-    response = session.post(api_url, headers=SNIPE_HEADERS, json=payload, verify=USER_ARGS.do_not_verify_ssl)
+    response = session.post(api_url, headers=SNIPE_HEADERS, json=payload)
     if response.status_code == 200:
         return response.json()['payload']['id']
     raise ValueError("Received error code {} when trying to create a new asset model in Snipe-IT. The response content is:\n{}".format(response.status_code, response.text))
@@ -573,10 +582,10 @@ def create_snipe_asset(payload, session=None):
         object returned for the requst.
     """
     if session is None:
-        session = snipe_session_setup()
+        session = session_setup("snipe")
     api_url = '{}/api/v1/hardware'.format(SNIPE_BASE)
     logging.debug('Calling to create a new asset against: %s\nThe payload for the POST request is:%s\nThe request headers can be found near the start of the output.', api_url, payload)
-    response = session.post(api_url, headers=SNIPE_HEADERS, json=payload, verify=USER_ARGS.do_not_verify_ssl)
+    response = session.post(api_url, headers=SNIPE_HEADERS, json=payload)
     logging.debug(response.text)
     if response.status_code == 200:
         logging.debug("Got back status code: 200 - %s", response.content)
@@ -601,10 +610,10 @@ def update_snipe_asset(snipe_id, payload, session=None):
     :returns: True if the update was successful, False if it was not.
     """
     if session is None:
-        session = snipe_session_setup()
+        session = session_setup("snipe")
     api_url = '{}/api/v1/hardware/{}'.format(SNIPE_BASE, snipe_id)
     logging.debug('The payload for the snipe update is: %s', payload)
-    response = session.patch(api_url, headers=SNIPE_HEADERS, json=payload, verify=USER_ARGS.do_not_verify_ssl)
+    response = session.patch(api_url, headers=SNIPE_HEADERS, json=payload)
     # Verify that the payload updated properly.
     goodupdate = True
     if response.status_code == 200:
@@ -638,13 +647,13 @@ def checkin_snipe_asset(asset_id, session=None):
         not successful.
     """
     if session is None:
-        session = snipe_session_setup()
+        session = session_setup("snipe")
     api_url = '{}/api/v1/hardware/{}/checkin'.format(SNIPE_BASE, asset_id)
     payload = {
         'note':'checked in by script from Jamf'
     }
     logging.debug('The payload for the snipe checkin is: %s', payload)
-    response = session.post(api_url, headers=SNIPE_HEADERS, json=payload, verify=USER_ARGS.do_not_verify_ssl)
+    response = session.post(api_url, headers=SNIPE_HEADERS, json=payload)
     logging.debug('The response from Snipe IT is: %s', response.json())
     if response.status_code == 200:
         logging.debug("Got back status code: 200 - %s", response.content)
@@ -680,7 +689,7 @@ def checkout_snipe_asset(user, asset_id, checked_out_user=None, session=None):
         it was not successful.
     """
     if session is None:
-        session = snipe_session_setup()
+        session = session_setup("snipe")
     logging.debug('Asset %s is being checked out to %s', user, asset_id)
     user_id = get_snipe_user_id(user, session=session)
     if user_id == 'NotFound':
@@ -704,7 +713,7 @@ def checkout_snipe_asset(user, asset_id, checked_out_user=None, session=None):
         'note':'Assignment made automatically, via script from Jamf.'
     }
     logging.debug('The payload for the snipe checkin is: %s', payload)
-    response = session.post(api_url, headers=SNIPE_HEADERS, json=payload, verify=USER_ARGS.do_not_verify_ssl)
+    response = session.post(api_url, headers=SNIPE_HEADERS, json=payload)
     logging.debug('The response from Snipe IT is: %s', response.json())
     if response.status_code == 200:
         logging.debug("Got back status code: 200 - %s", response.content)
@@ -725,7 +734,7 @@ def get_snipe_apple_manufacturer(session):
     #TODO: Handle pagination of the /manufacturers endpoint
     logging.info("Searching for the manufacturer with the name 'Apple'")
     api_url = '{}/api/v1/manufacturers'.format(SNIPE_BASE)
-    response = session.get(api_url, headers=SNIPE_HEADERS, verify=USER_ARGS.do_not_verify_ssl,)
+    response = session.get(api_url, headers=SNIPE_HEADERS,)
     for manufacturer in response.json()["rows"]:
         if manufacturer["name"].casefold() == "apple":
             manufacturer_id = manufacturer["id"]
@@ -736,21 +745,21 @@ def get_snipe_apple_manufacturer(session):
 
 ### Run Testing ###
 # Report if we're verifying SSL or not.
-logging.info("SSL Verification is set to: %s", USER_ARGS.do_not_verify_ssl)
+logging.info("SSL Verification is set to: %s", not USER_ARGS.do_not_verify_ssl)
 
 # Do some tests to see if the hosts are up.
 
-JAMF_SESSION = jamf_session_setup()
-SNIPE_SESSION = snipe_session_setup()
+JAMF_SESSION = session_setup("jamf", verify_ssl=not USER_ARGS.do_not_verify_ssl)
+SNIPE_SESSION = session_setup("snipe", verify_ssl=not USER_ARGS.do_not_verify_ssl)
 
 logging.info("Running tests to see if hosts are up.")
 try:
-    SNIPE_UP = True if SNIPE_SESSION.get(SNIPE_BASE, verify=USER_ARGS.do_not_verify_ssl, hooks={'response': snipe_request_handler}).status_code == 200 else False
+    SNIPE_UP = True if SNIPE_SESSION.get(SNIPE_BASE, hooks={'response': snipe_request_handler}).status_code == 200 else False
 except Exception as exception:
     logging.exception(exception)
     SNIPE_UP = False
 try:
-    JAMF_UP = True if JAMF_SESSION.get(JAMF_BASE, verify=USER_ARGS.do_not_verify_ssl).status_code in (200, 401) else False
+    JAMF_UP = True if JAMF_SESSION.get(JAMF_BASE).status_code in (200, 401) else False
 except Exception as exception:
     logging.exception(exception)
     JAMF_UP = False

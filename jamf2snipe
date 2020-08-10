@@ -767,12 +767,12 @@ SNIPE_SESSION = session_setup("snipe", verify_ssl=not USER_ARGS.do_not_verify_ss
 
 logging.info("Running tests to see if hosts are up.")
 try:
-    SNIPE_UP = True if SNIPE_SESSION.get(SNIPE_BASE, hooks={'response': snipe_request_handler}).status_code == 200 else False
+    SNIPE_UP = SNIPE_SESSION.get(SNIPE_BASE, hooks={'response': snipe_request_handler}).status_code == 200
 except Exception as exception: #pylint: disable=broad-except
     logging.exception(exception)
     SNIPE_UP = False
 try:
-    JAMF_UP = True if JAMF_SESSION.get(JAMF_BASE).status_code in (200, 401) else False
+    JAMF_UP = JAMF_SESSION.get(JAMF_BASE).status_code in (200, 401)
 except Exception as exception: #pylint: disable=broad-except
     logging.exception(exception)
     JAMF_UP = False

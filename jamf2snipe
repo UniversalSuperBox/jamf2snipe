@@ -152,9 +152,8 @@ for key in config['computers-api-mapping']:
     if jamfsplit[0] in validsubset:
         logging.info('Found subset %s: Acceptable', jamfsplit[0])
         continue
-    else:
-        logging.error("Found invalid subset: %s in the settings.conf file.\nThis is not in the acceptable list of subsets. Check your settings.conf\n Valid subsets are: %s", jamfsplit[0], ', '.join(validsubset))
-        raise SystemExit("Invalid Subset found in settings.conf")
+    logging.error("Found invalid subset: %s in the settings.conf file.\nThis is not in the acceptable list of subsets. Check your settings.conf\n Valid subsets are: %s", jamfsplit[0], ', '.join(validsubset))
+    raise SystemExit("Invalid Subset found in settings.conf")
 
 ### Setup Some Functions ###
 SNIPE_API_COUNT = 0
@@ -415,16 +414,14 @@ def search_snipe_asset(serial, session=None):
         # Check to make sure there's actually a result
         if jsonresponse['total'] == 1:
             return jsonresponse
-        elif jsonresponse['total'] == 0:
+        if jsonresponse['total'] == 0:
             logging.info("No assets match %s", serial)
             return "NoMatch"
-        else:
-            logging.warning('FOUND %s matching assets while searching for: %s', jsonresponse['total'], serial)
-            return "MultiMatch"
-    else:
-        logging.warning('Snipe-IT responded with error code:%s when we tried to look up: %s', response.text, serial)
-        logging.debug('%s - %s', response.status_code, response.content)
-        return "ERROR"
+        logging.warning('FOUND %s matching assets while searching for: %s', jsonresponse['total'], serial)
+        return "MultiMatch"
+    logging.warning('Snipe-IT responded with error code:%s when we tried to look up: %s', response.text, serial)
+    logging.debug('%s - %s', response.status_code, response.content)
+    return "ERROR"
 
 def get_snipe_models(session=None):
     """Looks up all of the asset models in Snipe-IT.
@@ -449,23 +446,19 @@ def get_snipe_models(session=None):
         logging.info("Got a valid response that should have %s models.", jsonresponse['total'])
         if jsonresponse['total'] <= len(jsonresponse['rows']):
             return jsonresponse
-        else:
-            logging.info("We didn't get enough results so we need to get them again.")
-            api_url = '{}/api/v1/models?limit={}'.format(SNIPE_BASE, jsonresponse['total'])
-            newresponse = session.get(api_url, headers=SNIPE_HEADERS)
-            if response.status_code == 200:
-                newjsonresponse = newresponse.json()
-                if newjsonresponse['total'] == len(newjsonresponse['rows']):
-                    return newjsonresponse
-                else:
-                    logging.error("We couldn't seem to get all of the model numbers")
-                    raise SystemExit("Unable to get all model objects from Snipe-IT instanace")
-            else:
-                logging.error('When we tried to retreive a list of models, Snipe-IT responded with error status code:%s - %s', response.status_code, response.content)
-                raise SystemExit("Snipe models API endpoint failed.")
-    else:
+        logging.info("We didn't get enough results so we need to get them again.")
+        api_url = '{}/api/v1/models?limit={}'.format(SNIPE_BASE, jsonresponse['total'])
+        newresponse = session.get(api_url, headers=SNIPE_HEADERS)
+        if response.status_code == 200:
+            newjsonresponse = newresponse.json()
+            if newjsonresponse['total'] == len(newjsonresponse['rows']):
+                return newjsonresponse
+            logging.error("We couldn't seem to get all of the model numbers")
+            raise SystemExit("Unable to get all model objects from Snipe-IT instanace")
         logging.error('When we tried to retreive a list of models, Snipe-IT responded with error status code:%s - %s', response.status_code, response.content)
         raise SystemExit("Snipe models API endpoint failed.")
+    logging.error('When we tried to retreive a list of models, Snipe-IT responded with error status code:%s - %s', response.status_code, response.content)
+    raise SystemExit("Snipe models API endpoint failed.")
 
 def get_snipe_users(previous=None, session=None):
     """Get a list of all users in Snipe-IT.
@@ -597,9 +590,8 @@ def create_snipe_asset(payload, session=None):
     if response.status_code == 200:
         logging.debug("Got back status code: 200 - %s", response.content)
         return 'AssetCreated', response
-    else:
-        logging.error('Asset creation failed for asset %s with error %s', payload['name'], response.text)
-        return response
+    logging.error('Asset creation failed for asset %s with error %s', payload['name'], response.text)
+    return response
 
 def update_snipe_asset(snipe_id, payload, session=None):
     """Updates an existing asset in Snipe-IT.
@@ -633,9 +625,8 @@ def update_snipe_asset(snipe_id, payload, session=None):
             else:
                 logging.info("Sucessfully updated %s with: %s", key, payload[key])
         return goodupdate
-    else:
-        logging.warning('Whoops. Got an error status code while updating ID %s: %s - %s', snipe_id, response.status_code, response.content)
-        return False
+    logging.warning('Whoops. Got an error status code while updating ID %s: %s - %s', snipe_id, response.status_code, response.content)
+    return False
 
 def checkin_snipe_asset(asset_id, session=None):
     """Checks in a single asset in Snipe-IT, removing its assignee.
@@ -731,9 +722,8 @@ def checkout_snipe_asset(user, asset_id, user_list, do_not_search, checked_out_u
     if response.status_code == 200:
         logging.debug("Got back status code: 200 - %s", response.content)
         return "CheckedOut"
-    else:
-        logging.error('Asset checkout failed for asset %s with error %s', asset_id, response.text)
-        return response
+    logging.error('Asset checkout failed for asset %s with error %s', asset_id, response.text)
+    return response
 
 def get_snipe_apple_manufacturer(session):
     """ Returns the integer ID of the "Apple" manufacturer in snipe-it.
@@ -935,17 +925,16 @@ for jamf_type in jamf_types:
             if jamf['general']['serial_number'] == 'Not Available':
                 logging.warning("The serial number is not available in JAMF. This is normal for DEP enrolled devices that have not yet checked in for the first time. Since there's no serial number yet, we'll skip it for now.")
                 continue
-            else:
-                new_snipe_asset = create_snipe_asset(newasset, session=SNIPE_SESSION)
-                if new_snipe_asset[0] != "AssetCreated":
+            new_snipe_asset = create_snipe_asset(newasset, session=SNIPE_SESSION)
+            if new_snipe_asset[0] != "AssetCreated":
+                continue
+            if USER_ARGS.users or USER_ARGS.users_force or USER_ARGS.users_inverse:
+                jamf_data_category, jamf_data_field = config['user-mapping']['jamf_api_field'].split()
+                if jamf_data_field not in jamf[jamf_data_category]:
+                    logging.info("Couldn't find %s for this device in %s, not checking it out.", jamf_data_field, jamf_data_category)
                     continue
-                if USER_ARGS.users or USER_ARGS.users_force or USER_ARGS.users_inverse:
-                    jamf_data_category, jamf_data_field = config['user-mapping']['jamf_api_field'].split()
-                    if jamf_data_field not in jamf[jamf_data_category]:
-                        logging.info("Couldn't find %s for this device in %s, not checking it out.", jamf_data_field, jamf_data_category)
-                        continue
-                    logging.info('Checking out new item %s to user %s', jamf['general']['name'], jamf[str(jamf_data_category)][str(jamf_data_field)])
-                    checkout_snipe_asset(jamf[jamf_data_category][jamf_data_field], new_snipe_asset[1].json()['payload']['id'], SNIPE_USERS, USER_ARGS.users_no_search, "NewAsset", session=SNIPE_SESSION)
+                logging.info('Checking out new item %s to user %s', jamf['general']['name'], jamf[str(jamf_data_category)][str(jamf_data_field)])
+                checkout_snipe_asset(jamf[jamf_data_category][jamf_data_field], new_snipe_asset[1].json()['payload']['id'], SNIPE_USERS, USER_ARGS.users_no_search, "NewAsset", session=SNIPE_SESSION)
 
         # Log an error if there's an issue, or more than once match.
         elif snipe == 'MultiMatch':

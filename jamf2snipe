@@ -135,6 +135,33 @@ SNIPE_API_COUNT = 0
 FIRST_SNIPE_CALL = None
 RATE_LIMIT_SNIPE = USER_ARGS.ratelimited
 
+def check_server_status(session, base_url):
+    """Checks if a server is responding with 200 OK or 401 Unauthorized at a given URL.
+
+    :param session:
+        requests.Session object to use for this request. If none is provided,
+        one will be created for you.
+
+    :param base_url:
+        URL to request
+
+    :returns: True if the host appears to be up, False if it does not.
+    """
+
+    try:
+        r = session.get(base_url)
+        # We'll receive a 401 from the JAMF server telling us to authenticate.
+        # That's okay, we only want to know it's up.
+        if r.status_code != 401:
+            r.raise_for_status()
+    except Exception as exception: #pylint: disable=broad-except
+        logging.exception(exception)
+        logging.error('%s did not return 200 OK or 401 Unauthorized. \nPlease check the your config in the settings.conf file.', base_url)
+        return False
+
+    logging.info('We were able to get a good response from your JAMFPro instance.')
+    return True
+
 def snipe_request_handler(r, *args, **kwargs): #pylint: disable=unused-argument,invalid-name
     """Handles rate limiting for the Snipe-IT server.
 
@@ -756,26 +783,14 @@ def main():
     except Exception as exception: #pylint: disable=broad-except
         logging.exception(exception)
         snipe_up = False
-    try:
-        jamf_up = JAMF_SESSION.get(JAMF_BASE).status_code in (200, 401)
-    except Exception as exception: #pylint: disable=broad-except
-        logging.exception(exception)
-        jamf_up = False
 
-    if not snipe_up:
-        logging.error('Snipe-IT looks like it is down from here. \nPlease check your config in the settings.conf file, or your instance.')
-    else:
-        logging.info('We were able to get a good response from your Snipe-IT instance.')
-    if not jamf_up:
-        logging.error('JAMFPro looks down from here. \nPlease check the your config in the settings.conf file, or your hosted JAMFPro instance.')
-    else:
-        logging.info('We were able to get a good response from your JAMFPro instance.')
+    #TODO: We should test that we can actually connect with the API keys, but
+    # connectivity testing is a good start.
+    jamf_up = check_server_status(JAMF_SESSION, JAMF_BASE)
+    snipe_up = check_server_status(SNIPE_SESSION, SNIPE_BASE)
 
     if not jamf_up or not snipe_up:
         raise SystemExit("Error: Host could not be contacted.")
-
-    # Test that we can actually connect with the API keys.
-    ##TODO Write some more tests here. ha!
 
     logging.info("Finished running our tests.")
 

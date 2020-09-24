@@ -361,12 +361,12 @@ class Snipe:
         return response
 
     def checkout_snipe_asset(
-        self, user, asset_id, user_list, do_not_search, checked_out_user=None
+        self, user, asset_id, user_list, do_not_search, checked_out_user=None, default_user=None
     ):
         """Checks out a single asset in Snipe-IT to the specified user.
 
-        It is the caller's responsibility to provide the currently checked-out user
-        as the ``checked_out_user`` argument.
+        It is the caller's responsibility to provide the currently checked-out
+        user as the ``checked_out_user`` argument.
 
         :param user: Username of the user to check this asset out to.
 
@@ -380,7 +380,12 @@ class Snipe:
 
         :param checked_out_user:
             Unique identifier (``"id"``) of the user which this asset is checked
-            out to at call time, or ``"NewAsset"`` if this asset was just created.
+            out to at call time, or ``"NewAsset"`` if this asset was just
+            created.
+
+        :param default_user:
+            Unique identifier (``"id"``) of user to check this asset out to if
+            the user specified by the ``user`` argument is not found.
 
         :returns:
             ``"NotFound"`` if the user with the given username does not exist.
@@ -391,12 +396,20 @@ class Snipe:
             it was not successful.
         """
         logging.debug("Asset %s is being checked out to %s", user, asset_id)
-        user_id = self.get_snipe_user_id(user, user_list, do_not_search)
+        if user:
+            user_id = self.get_snipe_user_id(user, user_list, do_not_search)
+        else:
+            logging.debug("No user specified, not checking out this asset")
+            return "NoUserSpecified"
         if user_id == "NotFound":
             logging.info("User %s not found", user)
-            return "NotFound"
+            if default_user is None:
+                logging.debug("No default user specified, returning error value")
+                return "NotFound"
+            logging.debug("We have a default user ID, using that.")
+            user_id = default_user
         if checked_out_user is None:
-            logging.info("Not checked out, checking out to %s", user)
+            logging.info("Not checked out, attempting to check out to %s", user)
         elif checked_out_user == "NewAsset":
             logging.info(
                 "First time this asset will be checked out, checking out to %s", user
@@ -404,9 +417,8 @@ class Snipe:
         elif checked_out_user["id"] == user_id:
             logging.info("%s already checked out to user %s", asset_id, user)
             return "CheckedOut"
-        else:
-            logging.info("Checking in %s to check it out to %s", asset_id, user)
-            self.checkin_snipe_asset(asset_id)
+        logging.info("Checking in %s to check it out to %s", asset_id, user)
+        self.checkin_snipe_asset(asset_id)
         api_url = "{}/api/v1/hardware/{}/checkout".format(self.base_url, asset_id)
         logging.info("Checking out %s to check it out to %s", asset_id, user)
         payload = {

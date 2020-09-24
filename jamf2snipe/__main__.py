@@ -523,7 +523,7 @@ def main():
                         logging.info("Couldn't find %s for this device in %s, not checking it out.", jamf_data_field, jamf_data_category)
                         continue
                     logging.info('Checking out new item %s to user %s', jamf['general']['name'], jamf[str(jamf_data_category)][str(jamf_data_field)])
-                    snipe_it.checkout_snipe_asset(jamf[jamf_data_category][jamf_data_field], new_snipe_asset[1].json()['payload']['id'], snipe_users, USER_ARGS.users_no_search, "NewAsset")
+                    snipe_it.checkout_snipe_asset(jamf[jamf_data_category][jamf_data_field], new_snipe_asset[1].json()['payload']['id'], snipe_users, USER_ARGS.users_no_search, "NewAsset", default_user=config["snipe-it"].get("default_user", None))
 
             # Log an error if there's an issue, or more than once match.
             elif snipe_asset == 'MultiMatch':
@@ -589,7 +589,7 @@ def main():
                             if jamf_data_field not in jamf[jamf_data_category]:
                                 logging.info("Couldn't find %s for this device in %s, not checking it out.", jamf_data_field, jamf_data_category)
                                 continue
-                            snipe_it.checkout_snipe_asset(jamf[jamf_data_category][jamf_data_field], snipe_id, snipe_users, USER_ARGS.users_no_search, snipe_asset['rows'][0]['assigned_to'])
+                            snipe_it.checkout_snipe_asset(jamf[jamf_data_category][jamf_data_field], snipe_id, snipe_users, USER_ARGS.users_no_search, snipe_asset['rows'][0]['assigned_to'], default_user=config["snipe-it"].get("default_user", None))
                         else:
                             logging.info("Can't checkout %s since the status isn't set to deployable", jamf['general']['name'])
 

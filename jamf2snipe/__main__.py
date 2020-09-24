@@ -55,6 +55,8 @@ import time
 
 import requests
 
+import snipe
+
 # Set us up for using runtime arguments by defining them.
 runtimeargs = argparse.ArgumentParser()
 runtimeargs.add_argument("-v", "--verbose", help="Sets the logging level to INFO and gives you a better idea of what the script is doing.", action="store_true")
@@ -114,10 +116,6 @@ JAMF_API_PASSWORD = config['jamf']['password']
 logging.debug("The configured password to access the API is: %s", JAMF_API_PASSWORD)
 
 # This is the address, cname, or FQDN for your snipe-it instance.
-SNIPE_BASE = config['snipe-it']['url']
-logging.info("The configured Snipe-IT base url is: %s", SNIPE_BASE)
-apiKey = config['snipe-it']['apiKey']
-logging.debug("The API key you provided for Snipe is: %s", apiKey)
 defaultStatus = config['snipe-it']['defaultStatus']
 logging.info("The default status we'll be setting updated computer to is: %s (I sure hope this is a number or something is probably wrong)", defaultStatus)
 
@@ -155,38 +153,6 @@ def check_server_status(session, base_url):
     logging.info('We were able to get a good response from your JAMFPro instance.')
     return True
 
-def snipe_request_handler(r, *args, **kwargs): #pylint: disable=unused-argument,invalid-name
-    """Handles rate limiting for the Snipe-IT server.
-
-    This function should be passed as a response hook on every request made to
-    the Snipe-IT server. The easiest way to ensure this happens is to use the
-    requests.Session made for Snipe-IT requests.
-    """
-    global SNIPE_API_COUNT
-    global FIRST_SNIPE_CALL
-    global SNIPE_SESSION
-    if RATE_LIMIT_SNIPE:
-        if '"messages":429' in r.text:
-            logging.warning("Despite respecting the rate limit of Snipe, we've still been limited. Trying again after sleeping for 2 seconds.")
-            time.sleep(2)
-            re_req = r.request
-            return SNIPE_SESSION.send(re_req)
-        if SNIPE_API_COUNT == 0:
-            FIRST_SNIPE_CALL = time.time()
-            time.sleep(0.5)
-        SNIPE_API_COUNT += 1
-        time_elapsed = (time.time() - FIRST_SNIPE_CALL)
-        snipe_api_rate = SNIPE_API_COUNT / time_elapsed
-        if snipe_api_rate > 1.95:
-            sleep_time = 0.5 + (snipe_api_rate - 1.95)
-            logging.debug('Going over snipe rate limit of 120/minute (%s/minute), sleeping for %s', snipe_api_rate, sleep_time)
-            time.sleep(sleep_time)
-        logging.debug("Made %s requests to Snipe IT in %s seconds, with a request being sent every %s seconds", SNIPE_API_COUNT, time_elapsed, snipe_api_rate)
-    if '"messages":429' in r.text:
-        logging.error(r.content)
-        raise SystemExit("We've been rate limited. Use option -r to respect the built in Snipe IT API rate limit of 120/minute.")
-    return r
-
 def jamf_request_handler(r, *args, **kwargs): #pylint: disable=unused-argument,invalid-name
     """Handles rate limiting for the JAMF server.
 
@@ -215,26 +181,24 @@ def session_setup(service, verify_ssl=True):
         See https://requests.readthedocs.io/en/master/api/#requests.Session.verify
     """
     session = requests.Session()
-    if service == "snipe":
-        session.hooks["response"].append(snipe_request_handler)
-    elif service == "jamf":
+    if service == "jamf":
         session.hooks["response"].append(jamf_request_handler)
+        session.headers.update({'Accept': 'application/json'})
+        session.auth = (JAMF_API_USER, JAMF_API_PASSWORD)
     else:
         raise ValueError("Incorrect service specified")
     session.verify = verify_ssl
     return session
 
-def get_jamf_computers(session=None):
+def get_jamf_computers(session):
     """Retrieves a list of all computers from the JAMF instance.
 
     The JAMF instance is specified by the global variable ``JAMF_BASE``
 
     :param session:
-        requests.Session object to use for this request. If none is provided,
-        one will be created for you.
+        requests.Session object to use for this request. This session must have
+        all headers needed for the request, including authorization headers.
     """
-    if session is None:
-        session = session_setup("jamf")
     api_url = '{0}/JSSResource/computers'.format(JAMF_BASE)
     logging.debug('Calling for JAMF computers against: %s\n The username, passwords, and headers for this GET requestcan be found near the beginning of the output.', api_url)
     response = session.get(api_url)
@@ -245,18 +209,15 @@ def get_jamf_computers(session=None):
     logging.debug("Returning a null value for the function.")
     return None
 
-def get_jamf_mobiles(session=None):
+def get_jamf_mobiles(session):
     """Retrieves a list of all mobile devices from the JAMF instance.
 
     The JAMF instance is specified by the global variable ``JAMF_BASE``
 
     :param session:
-        requests.Session object to use for this request. If none is provided,
-        one will be created for you.
-        provided.
+        requests.Session object to use for this request. This session must have
+        all headers needed for the request, including authorization headers.
     """
-    if session is None:
-        session = session_setup("jamf")
     api_url = '{0}/JSSResource/mobiledevices'.format(JAMF_BASE)
     logging.debug('Calling for JAMF mobiles against: %s\n The username, passwords, and headers for this GET requestcan be found near the beginning of the output.', api_url)
     response = session.get(api_url)
@@ -267,7 +228,7 @@ def get_jamf_mobiles(session=None):
     logging.debug("Returning a null value for the function.")
     return None
 
-def search_jamf_asset(jamf_id, session=None):
+def search_jamf_asset(jamf_id, session):
     """Retrieves a single computer from the JAMF instance by ID.
 
     The JAMF instance is specified by the global variable ``JAMF_BASE``
@@ -275,11 +236,9 @@ def search_jamf_asset(jamf_id, session=None):
     :param jamf_id: JAMF instance's unique ID value identifying this computer.
 
     :param session:
-        requests.Session object to use for this request. If none is provided,
-        one will be created for you.
+        requests.Session object to use for this request. This session must have
+        all headers needed for the request, including authorization headers.
     """
-    if session is None:
-        session = session_setup("jamf")
     api_url = "{}/JSSResource/computers/id/{}".format(JAMF_BASE, jamf_id)
     response = session.get(api_url)
     if response.status_code == 200:
@@ -291,7 +250,7 @@ def search_jamf_asset(jamf_id, session=None):
     logging.debug("Returning a null value for the function.")
     return None
 
-def search_jamf_mobile(jamf_id, session=None):
+def search_jamf_mobile(jamf_id, session):
     """Retrieves a single mobile device from the JAMF instance by ID.
 
     The JAMF instance is specified by the global variable ``JAMF_BASE``
@@ -300,11 +259,9 @@ def search_jamf_mobile(jamf_id, session=None):
         device.
 
     :param session:
-        requests.Session object to use for this request. If none is provided,
-        one will be created for you.
+        requests.Session object to use for this request. This session must have
+        all headers needed for the request, including authorization headers.
     """
-    if session is None:
-        session = session_setup("jamf")
     api_url = "{}/JSSResource/mobiledevices/id/{}".format(JAMF_BASE, jamf_id)
     response = session.get(api_url)
     if response.status_code == 200:
@@ -316,7 +273,7 @@ def search_jamf_mobile(jamf_id, session=None):
     logging.debug("Returning a null value for the function.")
     return None
 
-def update_jamf_asset_tag(jamf_id, asset_tag, session=None):
+def update_jamf_asset_tag(jamf_id, asset_tag, session):
     """Updates the asset tag field on a single computer in JAMF.
 
     The JAMF instance is specified by the global variable ``JAMF_BASE``
@@ -327,11 +284,9 @@ def update_jamf_asset_tag(jamf_id, asset_tag, session=None):
         in the JAMF instance.
 
     :param session:
-        requests.Session object to use for this request. If none is provided,
-        one will be created for you.
+        requests.Session object to use for this request. This session must have
+        all headers needed for the request, including authorization headers.
     """
-    if session is None:
-        session = session_setup("jamf")
     api_url = "{}/JSSResource/computers/id/{}".format(JAMF_BASE, jamf_id)
     payload = """<?xml version="1.0" encoding="UTF-8"?><computer><general><id>{}</id><asset_tag>{}</asset_tag></general></computer>""".format(jamf_id, asset_tag)
     logging.debug('Making Get request against: %s\nPayload for the PUT request is: %s\nThe username, password, and headers can be found near the beginning of the output.', api_url, payload)
@@ -345,7 +300,7 @@ def update_jamf_asset_tag(jamf_id, asset_tag, session=None):
     logging.warning('Got back an error response code:%s - %s', response.status_code, response.content)
     return None
 
-def update_jamf_mobiledevice_asset_tag(jamf_id, asset_tag, session=None):
+def update_jamf_mobiledevice_asset_tag(jamf_id, asset_tag, session):
     """Updates the asset tag field on a single mobile device in JAMF.
 
     The JAMF instance is specified by the global variable ``JAMF_BASE``
@@ -357,11 +312,9 @@ def update_jamf_mobiledevice_asset_tag(jamf_id, asset_tag, session=None):
         device in the JAMF instance.
 
     :param session:
-        requests.Session object to use for this request. If none is provided,
-        one will be created for you.
+        requests.Session object to use for this request. This session must have
+        all headers needed for the request, including authorization headers.
     """
-    if session is None:
-        session = session_setup("jamf")
     api_url = "{}/JSSResource/mobiledevices/id/{}".format(JAMF_BASE, jamf_id)
     payload = """<?xml version="1.0" encoding="UTF-8"?><mobile_device><general><id>{}</id><asset_tag>{}</asset_tag></general></mobile_device>""".format(jamf_id, asset_tag)
     logging.debug('Making Get request against: %s\nPayload for the PUT request is: %s\nThe username, password, and headers can be found near the beginning of the output.', api_url, payload)
@@ -375,383 +328,7 @@ def update_jamf_mobiledevice_asset_tag(jamf_id, asset_tag, session=None):
     logging.warning('Got back an error response code:%s - %s', response.status_code, response.content)
     return None
 
-def search_snipe_asset(serial, session=None):
-    """Looks up an asset by its serial number in Snipe-IT.
-
-    The Snipe-IT instance is specified by the ``SNIPE_BASE`` global variable.
-
-    Snipe-IT does not enforce uniqueness of the serial number, so it may return
-    more than one asset for the search.
-
-    :returns: If a single match is found, a dict object representing the match
-        is returned.
-
-        If no match is found, the string ``"NoMatch"`` is returned.
-
-        If more than one match is found, the string ``"MultiMatch"`` is
-        returned.
-
-        If any error occurs during the request, the string ``"ERROR"`` is
-        returned.
-
-    :param serial: Serial number to look up in Snipe-IT.
-
-    :param session:
-        requests.Session object to use for this request. If none is provided,
-        one will be created for you.
-    """
-    if session is None:
-        session = session_setup("snipe")
-    api_url = '{}/api/v1/hardware/byserial/{}'.format(SNIPE_BASE, serial)
-    response = session.get(api_url)
-    if response.status_code == 200:
-        jsonresponse = response.json()
-        # Check to make sure there's actually a result
-        if jsonresponse['total'] == 1:
-            return jsonresponse
-        if jsonresponse['total'] == 0:
-            logging.info("No assets match %s", serial)
-            return "NoMatch"
-        logging.warning('FOUND %s matching assets while searching for: %s', jsonresponse['total'], serial)
-        return "MultiMatch"
-    logging.warning('Snipe-IT responded with error code:%s when we tried to look up: %s', response.text, serial)
-    logging.debug('%s - %s', response.status_code, response.content)
-    return "ERROR"
-
-def get_snipe_models(session=None):
-    """Looks up all of the asset models in Snipe-IT.
-
-    The Snipe-IT instance is specified by the ``SNIPE_BASE`` global variable.
-
-    Returns a dict object matching https://snipe-it.readme.io/reference#models
-
-    Exits the program on errors.
-
-    :param session:
-        requests.Session object to use for this request. If none is provided,
-        one will be created for you.
-    """
-    if session is None:
-        session = session_setup("snipe")
-    api_url = '{}/api/v1/models'.format(SNIPE_BASE)
-    logging.debug('Calling against: %s', api_url)
-    response = session.get(api_url)
-    if response.status_code == 200:
-        jsonresponse = response.json()
-        logging.info("Got a valid response that should have %s models.", jsonresponse['total'])
-        if jsonresponse['total'] <= len(jsonresponse['rows']):
-            return jsonresponse
-        logging.info("We didn't get enough results so we need to get them again.")
-        api_url = '{}/api/v1/models?limit={}'.format(SNIPE_BASE, jsonresponse['total'])
-        newresponse = session.get(api_url)
-        if response.status_code == 200:
-            newjsonresponse = newresponse.json()
-            if newjsonresponse['total'] == len(newjsonresponse['rows']):
-                return newjsonresponse
-            logging.error("We couldn't seem to get all of the model numbers")
-            raise SystemExit("Unable to get all model objects from Snipe-IT instanace")
-        logging.error('When we tried to retreive a list of models, Snipe-IT responded with error status code:%s - %s', response.status_code, response.content)
-        raise SystemExit("Snipe models API endpoint failed.")
-    logging.error('When we tried to retreive a list of models, Snipe-IT responded with error status code:%s - %s', response.status_code, response.content)
-    raise SystemExit("Snipe models API endpoint failed.")
-
-def get_snipe_users(previous=None, session=None):
-    """Get a list of all users in Snipe-IT.
-
-    The Snipe-IT instance is specified by the ``SNIPE_BASE`` global variable.
-
-    This function is recursive. Please call it without the ``previous``
-    argument, it will eventually return your list.
-
-    :param previous: List of users to append to in this run.
-
-    :param session:
-        requests.Session object to use for this request. If none is provided,
-        one will be created for you.
-    """
-    if previous is None:
-        previous = []
-    if session is None:
-        session = session_setup("snipe")
-    user_id_url = '{}/api/v1/users'.format(SNIPE_BASE)
-    payload = {
-        'limit': 100,
-        'offset': len(previous)
-    }
-    logging.debug('The payload for the snipe users GET is %s', payload)
-    response = session.get(user_id_url, json=payload)
-    response_json = response.json()
-    current = response_json['rows']
-    if len(previous) != 0:
-        current = previous + current
-    if response_json['total'] > len(current):
-        logging.debug('We have more than 100 users, get the next page - total: %s current: %s', response_json['total'], len(current))
-        return get_snipe_users(previous=current, session=session)
-    return current
-
-def get_snipe_user_id(username, user_list, do_not_search, session=None):
-    """Get a Snipe-IT user's unique identifier given their username.
-
-    The Snipe-IT instance is specified by the ``SNIPE_BASE`` global variable.
-
-    :param username: Username to search Snipe-IT for.
-
-    :param user_list: A list of users returned by get_snipe_users.
-
-    :param do_not_search:
-        Do not try to use the Snipe-IT user search to find the requested
-        username if we were completely unable to find them in user_dict.
-
-    :param session:
-        requests.Session object to use for this request. If none is provided,
-        one will be created for you.
-
-    :returns: ``"id"`` value of the user object from Snipe-IT.
-    """
-    if session is None:
-        session = session_setup("snipe")
-    if username == '':
-        return "NotFound"
-    username = username.lower()
-    for user in user_list:
-        for value in user.values():
-            if str(value).lower() == username:
-                user_id = user['id']
-                return user_id
-    if do_not_search:
-        logging.debug("No matches in user_list for %s, not querying the API for the next closest match since we've been told not to", username)
-        return "NotFound"
-    logging.debug('No matches in user_list for %s, querying the API for the next closest match', username)
-    user_id_url = '{}/api/v1/users'.format(SNIPE_BASE)
-    payload = {
-        'search':username,
-        'limit':1,
-        'sort':'username',
-        'order':'asc'
-    }
-    logging.debug('The payload for the snipe user search is: %s', payload)
-    response = session.get(user_id_url, json=payload)
-    try:
-        return response.json()['rows'][0]['id']
-    except (KeyError, IndexError):
-        return "NotFound"
-
-def create_snipe_model(payload, session=None):
-    """Creates a new model in Snipe-IT.
-
-    The Snipe-IT instance is specified by the ``SNIPE_BASE`` global variable.
-
-    :param payload: JSON to send directly to the models endpoint in Snipe-IT.
-
-    :param session:
-        requests.Session object to use for this request. If none is provided,
-        one will be created for you.
-
-    :returns: The new model's unique identifier (id) value in Snipe-IT.
-
-    :raises ValueError: Snipe-IT returned a status code other than 200 OK.
-    """
-    if session is None:
-        session = session_setup("snipe")
-    api_url = '{}/api/v1/models'.format(SNIPE_BASE)
-    logging.debug('Calling to create new snipe model type against: %s\nThe payload for the POST request is:%s\nThe request headers can be found near the start of the output.', api_url, payload)
-    response = session.post(api_url, json=payload)
-    if response.status_code == 200:
-        return response.json()['payload']['id']
-    raise ValueError("Received error code {} when trying to create a new asset model in Snipe-IT. The response content is:\n{}".format(response.status_code, response.text))
-
-def create_snipe_asset(payload, session=None):
-    """Creates a new asset in Snipe-IT.
-
-    The Snipe-IT instance is specified by the ``SNIPE_BASE`` global variable.
-
-    :param payload: JSON to send directly to the models endpoint in Snipe-IT.
-
-    :param session:
-        requests.Session object to use for this request. If none is provided,
-        one will be created for you.
-
-    :returns:
-        A tuple of the format ``(status, response)`` where ``status`` is the
-        string ``"AssetCreated"`` and ``response`` is the requests.Response
-        object returned for the requst.
-    """
-    if session is None:
-        session = session_setup("snipe")
-    api_url = '{}/api/v1/hardware'.format(SNIPE_BASE)
-    logging.debug('Calling to create a new asset against: %s\nThe payload for the POST request is:%s\nThe request headers can be found near the start of the output.', api_url, payload)
-    response = session.post(api_url, json=payload)
-    logging.debug(response.text)
-    if response.status_code == 200:
-        logging.debug("Got back status code: 200 - %s", response.content)
-        return 'AssetCreated', response
-    logging.error('Asset creation failed for asset %s with error %s', payload['name'], response.text)
-    return response
-
-def update_snipe_asset(snipe_id, payload, session=None):
-    """Updates an existing asset in Snipe-IT.
-
-    The Snipe-IT instance is specified by the ``SNIPE_BASE`` global variable.
-
-    :param snipe_id: Unique identifier of the object to update in Snipe-IT.
-
-    :param payload: JSON to send directly to the models endpoint in Snipe-IT.
-
-    :param session:
-        requests.Session object to use for this request. If none is provided,
-        one will be created for you.
-
-    :returns: True if the update was successful, False if it was not.
-    """
-    if session is None:
-        session = session_setup("snipe")
-    api_url = '{}/api/v1/hardware/{}'.format(SNIPE_BASE, snipe_id)
-    logging.debug('The payload for the snipe update is: %s', payload)
-    response = session.patch(api_url, json=payload)
-    # Verify that the payload updated properly.
-    goodupdate = True
-    if response.status_code == 200:
-        logging.debug("Got back status code: 200 - Checking the payload updated properly: If you error here it's because you configure the API mapping right.")
-        jsonresponse = response.json()
-        for key in payload:
-            if jsonresponse['payload'][key] != payload[key]:
-                logging.error('Unable to update ID: %s. We failed to update the %s field with "%s"', snipe_id, key, payload[key])
-                goodupdate = False
-            else:
-                logging.info("Sucessfully updated %s with: %s", key, payload[key])
-        return goodupdate
-    logging.warning('Whoops. Got an error status code while updating ID %s: %s - %s', snipe_id, response.status_code, response.content)
-    return False
-
-def checkin_snipe_asset(asset_id, session=None):
-    """Checks in a single asset in Snipe-IT, removing its assignee.
-
-    The Snipe-IT instance is specified by the ``SNIPE_BASE`` global variable.
-
-    :param asset_id: Unique identifier of the object to update in Snipe-IT.
-
-    :param session:
-        requests.Session object to use for this request. If none is provided,
-        one will be created for you.
-
-    :returns:
-        The string ``"CheckedOut"`` if the checkin was successful, the
-        ``requests.Response`` object returned by the request if the checkin was
-        not successful.
-    """
-    if session is None:
-        session = session_setup("snipe")
-    api_url = '{}/api/v1/hardware/{}/checkin'.format(SNIPE_BASE, asset_id)
-    payload = {
-        'note':'checked in by script from Jamf'
-    }
-    logging.debug('The payload for the snipe checkin is: %s', payload)
-    response = session.post(api_url, json=payload)
-    logging.debug('The response from Snipe IT is: %s', response.json())
-    if response.status_code == 200:
-        logging.debug("Got back status code: 200 - %s", response.content)
-        return "CheckedOut"
-    return response
-
-def checkout_snipe_asset(user, asset_id, user_list, do_not_search, checked_out_user=None, session=None):
-    """Checks out a single asset in Snipe-IT to the specified user.
-
-    The Snipe-IT instance is specified by the ``SNIPE_BASE`` global variable.
-
-    It is the caller's responsibility to provide the currently checked-out user
-    as the ``checked_out_user`` argument.
-
-    :param user: Username of the user to check this asset out to.
-
-    :param asset_id: Unique identifier of the object to update in Snipe-IT.
-
-    :param user_list: A list of users returned by get_snipe_users.
-
-    :param do_not_search:
-        Do not try to use the Snipe-IT user search to find the requested
-        username if we were completely unable to find them in user_dict.
-
-    :param checked_out_user:
-        Unique identifier (``"id"``) of the user which this asset is checked
-        out to at call time, or ``"NewAsset"`` if this asset was just created.
-
-    :param session:
-        requests.Session object to use for this request. If none is provided,
-        one will be created for you.
-
-    :returns:
-        ``"NotFound"`` if the user with the given username does not exist.
-
-        ``"CheckedOut"`` if the asset was checked out successfully.
-
-        The ``requests.Response`` object returned by the checkout request if
-        it was not successful.
-    """
-    if session is None:
-        session = session_setup("snipe")
-    logging.debug('Asset %s is being checked out to %s', user, asset_id)
-    user_id = get_snipe_user_id(user, user_list, do_not_search, session=session)
-    if user_id == 'NotFound':
-        logging.info("User %s not found", user)
-        return "NotFound"
-    if checked_out_user is None:
-        logging.info("Not checked out, checking out to %s", user)
-    elif checked_out_user == "NewAsset":
-        logging.info("First time this asset will be checked out, checking out to %s", user)
-    elif checked_out_user['id'] == user_id:
-        logging.info("%s already checked out to user %s", asset_id, user)
-        return 'CheckedOut'
-    else:
-        logging.info("Checking in %s to check it out to %s", asset_id, user)
-        checkin_snipe_asset(asset_id, session=session)
-    api_url = '{}/api/v1/hardware/{}/checkout'.format(SNIPE_BASE, asset_id)
-    logging.info("Checking out %s to check it out to %s", asset_id, user)
-    payload = {
-        'checkout_to_type':'user',
-        'assigned_user':user_id,
-        'note':'Assignment made automatically, via script from Jamf.'
-    }
-    logging.debug('The payload for the snipe checkin is: %s', payload)
-    response = session.post(api_url, json=payload)
-    logging.debug('The response from Snipe IT is: %s', response.json())
-    if response.status_code == 200:
-        logging.debug("Got back status code: 200 - %s", response.content)
-        return "CheckedOut"
-    logging.error('Asset checkout failed for asset %s with error %s', asset_id, response.text)
-    return response
-
-def get_snipe_apple_manufacturer(session):
-    """ Returns the integer ID of the "Apple" manufacturer in snipe-it.
-
-    Raises ValueError if the "Apple" manufacturer is not found.
-
-    :param session:
-        requests.Session object to use for this request. If none is provided,
-        one will be created for you.
-    """
-    #TODO: Handle pagination of the /manufacturers endpoint
-    logging.info("Searching for the manufacturer with the name 'Apple'")
-    api_url = '{}/api/v1/manufacturers'.format(SNIPE_BASE)
-    response = session.get(api_url)
-    for manufacturer in response.json()["rows"]:
-        if manufacturer["name"].casefold() == "apple":
-            manufacturer_id = manufacturer["id"]
-            logging.info("Found the manufacturer with the name 'Apple', its ID is %i", manufacturer_id)
-            return manufacturer_id
-
-    raise ValueError("The Apple manufacturer was not found.")
-
 JAMF_SESSION = session_setup("jamf", verify_ssl=not USER_ARGS.do_not_verify_ssl)
-SNIPE_SESSION = session_setup("snipe", verify_ssl=not USER_ARGS.do_not_verify_ssl)
-
-# Headers for the API call.
-
-logging.info("Creating the headers we'll need for API calls")
-JAMF_SESSION.headers.update({'Accept': 'application/json'})
-SNIPE_SESSION.headers.update({'Authorization': 'Bearer {}'.format(apiKey), 'Accept': 'application/json', 'Content-Type':'application/json'})
-logging.debug('Request headers for JamfPro will be: %s\nRequest headers for Snipe will be: %s', JAMF_SESSION.headers, SNIPE_SESSION.headers)
-
-JAMF_SESSION.auth = (JAMF_API_USER, JAMF_API_PASSWORD)
 
 def main():
     # Do some tests to see if the user has updated their settings.conf file
@@ -777,11 +354,14 @@ def main():
         logging.error("Found invalid subset: %s in the settings.conf file.\nThis is not in the acceptable list of subsets. Check your settings.conf\n Valid subsets are: %s", jamfsplit[0], ', '.join(validsubset))
         raise SystemExit("Invalid Subset found in settings.conf")
 
+    snipe_it = snipe.Snipe(config['snipe-it']['url'], config['snipe-it']['apiKey'])
+
     # Make sure our services are up
     logging.info("SSL Verification is set to: %s", not USER_ARGS.do_not_verify_ssl)
     logging.info("Running tests to see if hosts are up.")
     try:
-        snipe_up = SNIPE_SESSION.get(SNIPE_BASE, hooks={'response': snipe_request_handler}).status_code == 200
+        snipe_it.check_connection()
+        snipe_up = True
     except Exception as exception: #pylint: disable=broad-except
         logging.exception(exception)
         snipe_up = False
@@ -789,7 +369,6 @@ def main():
     #TODO: We should test that we can actually connect with the API keys, but
     # connectivity testing is a good start.
     jamf_up = check_server_status(JAMF_SESSION, JAMF_BASE)
-    snipe_up = check_server_status(SNIPE_SESSION, SNIPE_BASE)
 
     if not jamf_up or not snipe_up:
         raise SystemExit("Error: Host could not be contacted.")
@@ -802,16 +381,15 @@ def main():
     apple_manufacturer_id = config['snipe-it'].get('manufacturer_id', None)
     if apple_manufacturer_id is None:
         try:
-            apple_manufacturer_id = get_snipe_apple_manufacturer(SNIPE_SESSION)
+            apple_manufacturer_id = snipe_it.get_snipe_apple_manufacturer()
         except ValueError:
-            #TODO: Make everything else exit this way too.
             logging.critical("Failed to find a manufacturer on your Snipe instance with the name 'Apple' and you did not set one in the configuration file. Make sure the 'Apple' manufacturer exists or set the manufacturer_id in settings.conf.")
             sys.exit(1)
     logging.debug("Snipe-IT 'Apple' Manufacturer ID is set to %s", apple_manufacturer_id)
 
     # Get a list of known models from Snipe
     logging.info("Getting a list of computer models that snipe knows about.")
-    snipemodels = get_snipe_models(session=SNIPE_SESSION)
+    snipemodels = snipe_it.get_snipe_models()
     logging.debug("Parsing the %s model results for models with model numbers.", len(snipemodels['rows']))
     model_numbers = {}
     for model in snipemodels['rows']:
@@ -823,8 +401,8 @@ def main():
     logging.debug("Here's the list of the %s models and their id's that we were able to collect:\n%s", len(model_numbers), model_numbers)
 
     # Get the IDS of all active assets.
-    jamf_computer_list = get_jamf_computers(session=JAMF_SESSION)
-    jamf_mobile_list = get_jamf_mobiles(session=JAMF_SESSION)
+    jamf_computer_list = get_jamf_computers(JAMF_SESSION)
+    jamf_mobile_list = get_jamf_mobiles(JAMF_SESSION)
     jamf_types = {
         'computers': jamf_computer_list,
         'mobile_devices': jamf_mobile_list
@@ -834,7 +412,7 @@ def main():
     # they're syncing users
 
     if USER_ARGS.users or USER_ARGS.users_force or USER_ARGS.users_inverse:
-        snipe_users = get_snipe_users(session=SNIPE_SESSION)
+        snipe_users = snipe_it.get_snipe_users()
 
     total_assets = 0
     if USER_ARGS.computers:
@@ -888,7 +466,7 @@ def main():
                     if 'computer_custom_fieldset_id' in config['snipe-it']:
                         fieldset_split = config['snipe-it']['computer_custom_fieldset_id']
                         newmodel['fieldset_id'] = fieldset_split
-                    snipe_model_id = create_snipe_model(newmodel, session=SNIPE_SESSION)
+                    snipe_model_id = snipe_it.create_snipe_model(newmodel)
                     model_numbers[jamf_model_identifier] = snipe_model_id
             elif jamf_type == 'mobile_devices':
                 jamf_model_identifier = jamf['general']['model_identifier']
@@ -898,14 +476,14 @@ def main():
                     if 'mobile_custom_fieldset_id' in config['snipe-it']:
                         fieldset_split = config['snipe-it']['mobile_custom_fieldset_id']
                         newmodel['fieldset_id'] = fieldset_split
-                    snipe_model_id = create_snipe_model(newmodel, session=SNIPE_SESSION)
+                    snipe_model_id = snipe_it.create_snipe_model(newmodel)
                     model_numbers[jamf_model_identifier] = snipe_model_id
 
             # Pass the SN from JAMF to search for a match in Snipe
-            snipe = search_snipe_asset(jamf['general']['serial_number'], session=SNIPE_SESSION)
+            snipe_asset = snipe_it.search_snipe_asset(jamf['general']['serial_number'])
 
             # Create a new asset if there's no match:
-            if snipe == 'NoMatch':
+            if snipe_asset == 'NoMatch':
                 logging.info("Creating a new asset in snipe for JAMF ID %s - %s", jamf['general']['id'], jamf['general']['name'])
                 # This section checks to see if the asset tag was already put into JAMF, if not it creates one with with Jamf's ID.
                 if jamf['general']['asset_tag'] == '':
@@ -936,7 +514,7 @@ def main():
                 if jamf['general']['serial_number'] == 'Not Available':
                     logging.warning("The serial number is not available in JAMF. This is normal for DEP enrolled devices that have not yet checked in for the first time. Since there's no serial number yet, we'll skip it for now.")
                     continue
-                new_snipe_asset = create_snipe_asset(newasset, session=SNIPE_SESSION)
+                new_snipe_asset = snipe_it.create_snipe_asset(newasset)
                 if new_snipe_asset[0] != "AssetCreated":
                     continue
                 if USER_ARGS.users or USER_ARGS.users_force or USER_ARGS.users_inverse:
@@ -945,18 +523,18 @@ def main():
                         logging.info("Couldn't find %s for this device in %s, not checking it out.", jamf_data_field, jamf_data_category)
                         continue
                     logging.info('Checking out new item %s to user %s', jamf['general']['name'], jamf[str(jamf_data_category)][str(jamf_data_field)])
-                    checkout_snipe_asset(jamf[jamf_data_category][jamf_data_field], new_snipe_asset[1].json()['payload']['id'], snipe_users, USER_ARGS.users_no_search, "NewAsset", session=SNIPE_SESSION)
+                    snipe_it.checkout_snipe_asset(jamf[jamf_data_category][jamf_data_field], new_snipe_asset[1].json()['payload']['id'], snipe_users, USER_ARGS.users_no_search, "NewAsset")
 
             # Log an error if there's an issue, or more than once match.
-            elif snipe == 'MultiMatch':
+            elif snipe_asset == 'MultiMatch':
                 logging.warning("WARN: You need to resolve multiple assets with the same serial number in your inventory. If you can't find them in your inventory, you might need to purge your deleted records. You can find that in the Snipe Admin settings. Skipping serial number %s for now.", jamf['general']['serial_number'])
-            elif snipe == 'ERROR':
+            elif snipe_asset == 'ERROR':
                 logging.error("We got an error when looking up serial number %s in snipe, which shouldn't happen at this point. Check your snipe instance and setup. Skipping for now.", jamf['general']['serial_number'])
 
             else:
                 # Only update if JAMF has more recent info.
-                snipe_id = snipe['rows'][0]['id']
-                snipe_time = snipe['rows'][0]['updated_at']['datetime']
+                snipe_id = snipe_asset['rows'][0]['id']
+                snipe_time = snipe_asset['rows'][0]['updated_at']['datetime']
                 if jamf_type == 'computers':
                     jamf_time = jamf['general']['report_date']
                 elif jamf_type == 'mobile_devices':
@@ -988,30 +566,30 @@ def main():
                         # Need to check that we're not needlessly updating the asset.
                         # If it's a custom value it'll fail the first section and send it to except section that will parse custom sections.
                         try:
-                            if snipe['rows'][0][snipekey] != latestvalue:
-                                update_snipe_asset(snipe_id, payload, session=SNIPE_SESSION)
+                            if snipe_asset['rows'][0][snipekey] != latestvalue:
+                                snipe_it.update_snipe_asset(snipe_id, payload)
                             else:
                                 logging.debug("Skipping the payload, because it already exits.")
                         except (KeyError, IndexError):
                             logging.debug("The snipekey lookup failed, which means it's a custom field. Parsing those to see if it needs to be updated or not.")
                             needsupdate = False
-                            for custom_field in snipe['rows'][0]['custom_fields']:
-                                if snipe['rows'][0]['custom_fields'][custom_field]['field'] == snipekey:
-                                    if snipe['rows'][0]['custom_fields'][custom_field]['value'] != latestvalue:
-                                        logging.debug("Found the field, and the value needs to be updated from %s to %s", snipe['rows'][0]['custom_fields'][custom_field]['value'], latestvalue)
+                            for custom_field in snipe_asset['rows'][0]['custom_fields']:
+                                if snipe_asset['rows'][0]['custom_fields'][custom_field]['field'] == snipekey:
+                                    if snipe_asset['rows'][0]['custom_fields'][custom_field]['value'] != latestvalue:
+                                        logging.debug("Found the field, and the value needs to be updated from %s to %s", snipe_asset['rows'][0]['custom_fields'][custom_field]['value'], latestvalue)
                                         needsupdate = True
                             if needsupdate:
-                                update_snipe_asset(snipe_id, payload, session=SNIPE_SESSION)
+                                snipe_it.update_snipe_asset(snipe_id, payload)
                             else:
                                 logging.debug("Skipping the payload, because it already exists, or the Snipe key we're mapping to doesn't.")
-                    if ((USER_ARGS.users or USER_ARGS.users_inverse) and (snipe['rows'][0]['assigned_to'] is None) == USER_ARGS.users) or USER_ARGS.users_force:
+                    if ((USER_ARGS.users or USER_ARGS.users_inverse) and (snipe_asset['rows'][0]['assigned_to'] is None) == USER_ARGS.users) or USER_ARGS.users_force:
 
-                        if snipe['rows'][0]['status_label']['status_meta'] in ('deployable', 'deployed'):
+                        if snipe_asset['rows'][0]['status_label']['status_meta'] in ('deployable', 'deployed'):
                             jamf_data_category, jamf_data_field = config['user-mapping']['jamf_api_field'].split()
                             if jamf_data_field not in jamf[jamf_data_category]:
                                 logging.info("Couldn't find %s for this device in %s, not checking it out.", jamf_data_field, jamf_data_category)
                                 continue
-                            checkout_snipe_asset(jamf[jamf_data_category][jamf_data_field], snipe_id, snipe_users, USER_ARGS.users_no_search, snipe['rows'][0]['assigned_to'], session=SNIPE_SESSION)
+                            snipe_it.checkout_snipe_asset(jamf[jamf_data_category][jamf_data_field], snipe_id, snipe_users, USER_ARGS.users_no_search, snipe_asset['rows'][0]['assigned_to'])
                         else:
                             logging.info("Can't checkout %s since the status isn't set to deployable", jamf['general']['name'])
 
@@ -1021,7 +599,7 @@ def main():
 
                 # Update/Sync the Snipe Asset Tag Number back to JAMF
                 # The user arg below is set to false if it's called, so this would fail if the user called it.
-                snipe_asset_tag = snipe['rows'][0]['asset_tag']
+                snipe_asset_tag = snipe_asset['rows'][0]['asset_tag']
                 jamf_asset_id = jamf['general']['id']
                 if (jamf['general']['asset_tag'] != snipe_asset_tag) and USER_ARGS.do_not_update_jamf:
                     logging.info("JAMF doesn't have the same asset tag as SNIPE so we'll update it because it should be authoritative.")

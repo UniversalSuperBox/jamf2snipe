@@ -1,7 +1,7 @@
 # jamf2snipe
 ## Import/Sync Computers from JAMF to Snipe-IT
 ```
-usage: jamf2snipe [-h] [-v] [--dryrun] [-d] [--do_not_verify_ssl] [-r]
+usage: python ./jamf2snipe [-h] [-v] [--dryrun] [-d] [--do_not_verify_ssl] [-r]
                   [--no_search] [-u | -ui | -uf] [-m | -c]
 
 optional arguments:

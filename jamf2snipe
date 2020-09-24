@@ -123,13 +123,6 @@ logging.info("The default status we'll be setting updated computer to is: %s (I 
 
 #TODO: Fail if defaultStatus is not an integer, assuming Snipe-IT can't accept anything but integer statuses.
 
-# Headers for the API call.
-
-logging.info("Creating the headers we'll need for API calls")
-JAMF_HEADERS = {'Accept': 'application/json'}
-SNIPE_HEADERS = {'Authorization': 'Bearer {}'.format(apiKey), 'Accept': 'application/json', 'Content-Type':'application/json'}
-logging.debug('Request headers for JamfPro will be: %s\nRequest headers for Snipe will be: %s', JAMF_HEADERS, SNIPE_HEADERS)
-
 ### Setup Some Functions ###
 SNIPE_API_COUNT = 0
 FIRST_SNIPE_CALL = None
@@ -244,7 +237,7 @@ def get_jamf_computers(session=None):
         session = session_setup("jamf")
     api_url = '{0}/JSSResource/computers'.format(JAMF_BASE)
     logging.debug('Calling for JAMF computers against: %s\n The username, passwords, and headers for this GET requestcan be found near the beginning of the output.', api_url)
-    response = session.get(api_url, auth=(JAMF_API_USER, JAMF_API_PASSWORD), headers=JAMF_HEADERS)
+    response = session.get(api_url, auth=(JAMF_API_USER, JAMF_API_PASSWORD))
     if response.status_code == 200:
         logging.debug("Got back a valid 200 response code.")
         return response.json()
@@ -266,7 +259,7 @@ def get_jamf_mobiles(session=None):
         session = session_setup("jamf")
     api_url = '{0}/JSSResource/mobiledevices'.format(JAMF_BASE)
     logging.debug('Calling for JAMF mobiles against: %s\n The username, passwords, and headers for this GET requestcan be found near the beginning of the output.', api_url)
-    response = session.get(api_url, auth=(JAMF_API_USER, JAMF_API_PASSWORD), headers=JAMF_HEADERS)
+    response = session.get(api_url, auth=(JAMF_API_USER, JAMF_API_PASSWORD))
     if response.status_code == 200:
         logging.debug("Got back a valid 200 response code.")
         return response.json()
@@ -288,7 +281,7 @@ def search_jamf_asset(jamf_id, session=None):
     if session is None:
         session = session_setup("jamf")
     api_url = "{}/JSSResource/computers/id/{}".format(JAMF_BASE, jamf_id)
-    response = session.get(api_url, auth=(JAMF_API_USER, JAMF_API_PASSWORD), headers=JAMF_HEADERS)
+    response = session.get(api_url, auth=(JAMF_API_USER, JAMF_API_PASSWORD))
     if response.status_code == 200:
         logging.debug("Got back a valid 200 response code.")
         jsonresponse = response.json()
@@ -313,7 +306,7 @@ def search_jamf_mobile(jamf_id, session=None):
     if session is None:
         session = session_setup("jamf")
     api_url = "{}/JSSResource/mobiledevices/id/{}".format(JAMF_BASE, jamf_id)
-    response = session.get(api_url, auth=(JAMF_API_USER, JAMF_API_PASSWORD), headers=JAMF_HEADERS)
+    response = session.get(api_url, auth=(JAMF_API_USER, JAMF_API_PASSWORD))
     if response.status_code == 200:
         logging.debug("Got back a valid 200 response code.")
         jsonresponse = response.json()
@@ -342,7 +335,7 @@ def update_jamf_asset_tag(jamf_id, asset_tag, session=None):
     api_url = "{}/JSSResource/computers/id/{}".format(JAMF_BASE, jamf_id)
     payload = """<?xml version="1.0" encoding="UTF-8"?><computer><general><id>{}</id><asset_tag>{}</asset_tag></general></computer>""".format(jamf_id, asset_tag)
     logging.debug('Making Get request against: %s\nPayload for the PUT request is: %s\nThe username, password, and headers can be found near the beginning of the output.', api_url, payload)
-    response = session.put(api_url, auth=(JAMF_API_USER, JAMF_API_PASSWORD), data=payload, headers=JAMF_HEADERS)
+    response = session.put(api_url, auth=(JAMF_API_USER, JAMF_API_PASSWORD), data=payload)
     if response.status_code == 201:
         logging.debug("Got a 201 response. Returning: True")
         return True
@@ -372,7 +365,7 @@ def update_jamf_mobiledevice_asset_tag(jamf_id, asset_tag, session=None):
     api_url = "{}/JSSResource/mobiledevices/id/{}".format(JAMF_BASE, jamf_id)
     payload = """<?xml version="1.0" encoding="UTF-8"?><mobile_device><general><id>{}</id><asset_tag>{}</asset_tag></general></mobile_device>""".format(jamf_id, asset_tag)
     logging.debug('Making Get request against: %s\nPayload for the PUT request is: %s\nThe username, password, and headers can be found near the beginning of the output.', api_url, payload)
-    response = session.put(api_url, auth=(JAMF_API_USER, JAMF_API_PASSWORD), data=payload, headers=JAMF_HEADERS)
+    response = session.put(api_url, auth=(JAMF_API_USER, JAMF_API_PASSWORD), data=payload)
     if response.status_code == 201:
         logging.debug("Got a 201 response. Returning: True")
         return True
@@ -410,7 +403,7 @@ def search_snipe_asset(serial, session=None):
     if session is None:
         session = session_setup("snipe")
     api_url = '{}/api/v1/hardware/byserial/{}'.format(SNIPE_BASE, serial)
-    response = session.get(api_url, headers=SNIPE_HEADERS)
+    response = session.get(api_url)
     if response.status_code == 200:
         jsonresponse = response.json()
         # Check to make sure there's actually a result
@@ -442,7 +435,7 @@ def get_snipe_models(session=None):
         session = session_setup("snipe")
     api_url = '{}/api/v1/models'.format(SNIPE_BASE)
     logging.debug('Calling against: %s', api_url)
-    response = session.get(api_url, headers=SNIPE_HEADERS)
+    response = session.get(api_url)
     if response.status_code == 200:
         jsonresponse = response.json()
         logging.info("Got a valid response that should have %s models.", jsonresponse['total'])
@@ -450,7 +443,7 @@ def get_snipe_models(session=None):
             return jsonresponse
         logging.info("We didn't get enough results so we need to get them again.")
         api_url = '{}/api/v1/models?limit={}'.format(SNIPE_BASE, jsonresponse['total'])
-        newresponse = session.get(api_url, headers=SNIPE_HEADERS)
+        newresponse = session.get(api_url)
         if response.status_code == 200:
             newjsonresponse = newresponse.json()
             if newjsonresponse['total'] == len(newjsonresponse['rows']):
@@ -486,7 +479,7 @@ def get_snipe_users(previous=None, session=None):
         'offset': len(previous)
     }
     logging.debug('The payload for the snipe users GET is %s', payload)
-    response = session.get(user_id_url, headers=SNIPE_HEADERS, json=payload)
+    response = session.get(user_id_url, json=payload)
     response_json = response.json()
     current = response_json['rows']
     if len(previous) != 0:
@@ -537,7 +530,7 @@ def get_snipe_user_id(username, user_list, do_not_search, session=None):
         'order':'asc'
     }
     logging.debug('The payload for the snipe user search is: %s', payload)
-    response = session.get(user_id_url, headers=SNIPE_HEADERS, json=payload)
+    response = session.get(user_id_url, json=payload)
     try:
         return response.json()['rows'][0]['id']
     except (KeyError, IndexError):
@@ -562,7 +555,7 @@ def create_snipe_model(payload, session=None):
         session = session_setup("snipe")
     api_url = '{}/api/v1/models'.format(SNIPE_BASE)
     logging.debug('Calling to create new snipe model type against: %s\nThe payload for the POST request is:%s\nThe request headers can be found near the start of the output.', api_url, payload)
-    response = session.post(api_url, headers=SNIPE_HEADERS, json=payload)
+    response = session.post(api_url, json=payload)
     if response.status_code == 200:
         return response.json()['payload']['id']
     raise ValueError("Received error code {} when trying to create a new asset model in Snipe-IT. The response content is:\n{}".format(response.status_code, response.text))
@@ -587,7 +580,7 @@ def create_snipe_asset(payload, session=None):
         session = session_setup("snipe")
     api_url = '{}/api/v1/hardware'.format(SNIPE_BASE)
     logging.debug('Calling to create a new asset against: %s\nThe payload for the POST request is:%s\nThe request headers can be found near the start of the output.', api_url, payload)
-    response = session.post(api_url, headers=SNIPE_HEADERS, json=payload)
+    response = session.post(api_url, json=payload)
     logging.debug(response.text)
     if response.status_code == 200:
         logging.debug("Got back status code: 200 - %s", response.content)
@@ -614,7 +607,7 @@ def update_snipe_asset(snipe_id, payload, session=None):
         session = session_setup("snipe")
     api_url = '{}/api/v1/hardware/{}'.format(SNIPE_BASE, snipe_id)
     logging.debug('The payload for the snipe update is: %s', payload)
-    response = session.patch(api_url, headers=SNIPE_HEADERS, json=payload)
+    response = session.patch(api_url, json=payload)
     # Verify that the payload updated properly.
     goodupdate = True
     if response.status_code == 200:
@@ -653,7 +646,7 @@ def checkin_snipe_asset(asset_id, session=None):
         'note':'checked in by script from Jamf'
     }
     logging.debug('The payload for the snipe checkin is: %s', payload)
-    response = session.post(api_url, headers=SNIPE_HEADERS, json=payload)
+    response = session.post(api_url, json=payload)
     logging.debug('The response from Snipe IT is: %s', response.json())
     if response.status_code == 200:
         logging.debug("Got back status code: 200 - %s", response.content)
@@ -719,7 +712,7 @@ def checkout_snipe_asset(user, asset_id, user_list, do_not_search, checked_out_u
         'note':'Assignment made automatically, via script from Jamf.'
     }
     logging.debug('The payload for the snipe checkin is: %s', payload)
-    response = session.post(api_url, headers=SNIPE_HEADERS, json=payload)
+    response = session.post(api_url, json=payload)
     logging.debug('The response from Snipe IT is: %s', response.json())
     if response.status_code == 200:
         logging.debug("Got back status code: 200 - %s", response.content)
@@ -739,7 +732,7 @@ def get_snipe_apple_manufacturer(session):
     #TODO: Handle pagination of the /manufacturers endpoint
     logging.info("Searching for the manufacturer with the name 'Apple'")
     api_url = '{}/api/v1/manufacturers'.format(SNIPE_BASE)
-    response = session.get(api_url, headers=SNIPE_HEADERS,)
+    response = session.get(api_url)
     for manufacturer in response.json()["rows"]:
         if manufacturer["name"].casefold() == "apple":
             manufacturer_id = manufacturer["id"]
@@ -750,6 +743,13 @@ def get_snipe_apple_manufacturer(session):
 
 JAMF_SESSION = session_setup("jamf", verify_ssl=not USER_ARGS.do_not_verify_ssl)
 SNIPE_SESSION = session_setup("snipe", verify_ssl=not USER_ARGS.do_not_verify_ssl)
+
+# Headers for the API call.
+
+logging.info("Creating the headers we'll need for API calls")
+JAMF_SESSION.headers.update({'Accept': 'application/json'})
+SNIPE_SESSION.headers.update({'Authorization': 'Bearer {}'.format(apiKey), 'Accept': 'application/json', 'Content-Type':'application/json'})
+logging.debug('Request headers for JamfPro will be: %s\nRequest headers for Snipe will be: %s', JAMF_SESSION.headers, SNIPE_SESSION.headers)
 
 def main():
     # Do some tests to see if the user has updated their settings.conf file

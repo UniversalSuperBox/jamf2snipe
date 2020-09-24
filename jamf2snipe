@@ -237,7 +237,7 @@ def get_jamf_computers(session=None):
         session = session_setup("jamf")
     api_url = '{0}/JSSResource/computers'.format(JAMF_BASE)
     logging.debug('Calling for JAMF computers against: %s\n The username, passwords, and headers for this GET requestcan be found near the beginning of the output.', api_url)
-    response = session.get(api_url, auth=(JAMF_API_USER, JAMF_API_PASSWORD))
+    response = session.get(api_url)
     if response.status_code == 200:
         logging.debug("Got back a valid 200 response code.")
         return response.json()
@@ -259,7 +259,7 @@ def get_jamf_mobiles(session=None):
         session = session_setup("jamf")
     api_url = '{0}/JSSResource/mobiledevices'.format(JAMF_BASE)
     logging.debug('Calling for JAMF mobiles against: %s\n The username, passwords, and headers for this GET requestcan be found near the beginning of the output.', api_url)
-    response = session.get(api_url, auth=(JAMF_API_USER, JAMF_API_PASSWORD))
+    response = session.get(api_url)
     if response.status_code == 200:
         logging.debug("Got back a valid 200 response code.")
         return response.json()
@@ -281,7 +281,7 @@ def search_jamf_asset(jamf_id, session=None):
     if session is None:
         session = session_setup("jamf")
     api_url = "{}/JSSResource/computers/id/{}".format(JAMF_BASE, jamf_id)
-    response = session.get(api_url, auth=(JAMF_API_USER, JAMF_API_PASSWORD))
+    response = session.get(api_url)
     if response.status_code == 200:
         logging.debug("Got back a valid 200 response code.")
         jsonresponse = response.json()
@@ -306,7 +306,7 @@ def search_jamf_mobile(jamf_id, session=None):
     if session is None:
         session = session_setup("jamf")
     api_url = "{}/JSSResource/mobiledevices/id/{}".format(JAMF_BASE, jamf_id)
-    response = session.get(api_url, auth=(JAMF_API_USER, JAMF_API_PASSWORD))
+    response = session.get(api_url)
     if response.status_code == 200:
         logging.debug("Got back a valid 200 response code.")
         jsonresponse = response.json()
@@ -335,7 +335,7 @@ def update_jamf_asset_tag(jamf_id, asset_tag, session=None):
     api_url = "{}/JSSResource/computers/id/{}".format(JAMF_BASE, jamf_id)
     payload = """<?xml version="1.0" encoding="UTF-8"?><computer><general><id>{}</id><asset_tag>{}</asset_tag></general></computer>""".format(jamf_id, asset_tag)
     logging.debug('Making Get request against: %s\nPayload for the PUT request is: %s\nThe username, password, and headers can be found near the beginning of the output.', api_url, payload)
-    response = session.put(api_url, auth=(JAMF_API_USER, JAMF_API_PASSWORD), data=payload)
+    response = session.put(api_url, data=payload)
     if response.status_code == 201:
         logging.debug("Got a 201 response. Returning: True")
         return True
@@ -365,7 +365,7 @@ def update_jamf_mobiledevice_asset_tag(jamf_id, asset_tag, session=None):
     api_url = "{}/JSSResource/mobiledevices/id/{}".format(JAMF_BASE, jamf_id)
     payload = """<?xml version="1.0" encoding="UTF-8"?><mobile_device><general><id>{}</id><asset_tag>{}</asset_tag></general></mobile_device>""".format(jamf_id, asset_tag)
     logging.debug('Making Get request against: %s\nPayload for the PUT request is: %s\nThe username, password, and headers can be found near the beginning of the output.', api_url, payload)
-    response = session.put(api_url, auth=(JAMF_API_USER, JAMF_API_PASSWORD), data=payload)
+    response = session.put(api_url, data=payload)
     if response.status_code == 201:
         logging.debug("Got a 201 response. Returning: True")
         return True
@@ -750,6 +750,8 @@ logging.info("Creating the headers we'll need for API calls")
 JAMF_SESSION.headers.update({'Accept': 'application/json'})
 SNIPE_SESSION.headers.update({'Authorization': 'Bearer {}'.format(apiKey), 'Accept': 'application/json', 'Content-Type':'application/json'})
 logging.debug('Request headers for JamfPro will be: %s\nRequest headers for Snipe will be: %s', JAMF_SESSION.headers, SNIPE_SESSION.headers)
+
+JAMF_SESSION.auth = (JAMF_API_USER, JAMF_API_PASSWORD)
 
 def main():
     # Do some tests to see if the user has updated their settings.conf file

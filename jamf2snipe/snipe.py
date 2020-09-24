@@ -310,6 +310,16 @@ class Snipe:
                 "Got back status code: 200 - Checking the payload updated properly: If you error here it's because you configure the API mapping right."
             )
             jsonresponse = response.json()
+
+            if jsonresponse["status"] != "success":
+                logging.error(
+                    'Unable to update ID: %s.\nSnipe-IT says: %s\nWe tried to update with payload %s',
+                    snipe_id,
+                    jsonresponse["messages"],
+                    payload,
+                )
+                return False
+
             for key in payload:
                 if jsonresponse["payload"][key] != payload[key]:
                     logging.error(

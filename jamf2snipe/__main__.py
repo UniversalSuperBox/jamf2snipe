@@ -213,7 +213,9 @@ def main():
     # they're syncing users
 
     if USER_ARGS.users or USER_ARGS.users_force or USER_ARGS.users_inverse:
+        logging.info("Retrieving list of users from Snipe-IT.")
         snipe_users = snipe_it.get_snipe_users()
+        logging.info("Got %i users.", len(snipe_users))
 
     total_assets = 0
     if USER_ARGS.computers:

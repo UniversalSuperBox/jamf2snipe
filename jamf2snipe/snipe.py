@@ -138,6 +138,40 @@ class Snipe:
         logging.debug("%s - %s", response.status_code, response.content)
         return "ERROR"
 
+    def _get_paginated_endpoint(self, endpoint):
+        """Gets all of the items found at a given paginated endpoint.
+
+        It seems like every system implements pagination differently, Snipe-IT
+        is no exception. Snipe-IT's pagination involves the server telling us
+        how many items there are in total and leaving us to figure out which
+        ones we need to request.
+
+        :param endpoint:
+            Endpoint to retrieve items from. For example, ``/api/v1/users``
+
+        :returns: List of dicts representing the objects from the endpoint.
+        """
+        api_url = "{}/{}".format(self.base_url, endpoint)
+        retrieved = 0
+        total = 1  # Will be overridden later
+        items = []
+        while retrieved < total:
+            payload = {"limit": 1000, "offset": retrieved}
+            logging.debug("The payload for the snipe items GET is %s", payload)
+            response = self._session.get(api_url, json=payload)
+            response_json = response.json()
+            this_iteration_items = response_json["rows"]
+            retrieved += len(this_iteration_items)
+            items.extend(this_iteration_items)
+
+            server_total = response_json["total"]
+            if total == 1 and server_total != 1:
+                total = server_total
+            elif server_total != total:
+                raise SnipeItError("Snipe-IT's total user count changed while we were retrieving {}! Please try again.".format(endpoint))
+
+        return items
+
     def get_snipe_models(self):
         """Looks up all of the asset models in Snipe-IT.
 
@@ -176,32 +210,12 @@ class Snipe:
         )
         raise SnipeItError("Snipe models API endpoint failed.")
 
-    def get_snipe_users(self, previous=None):
+    def get_snipe_users(self):
         """Get a list of all users in Snipe-IT.
 
-        This function is recursive. Please call it without the ``previous``
-        argument, it will eventually return your list.
-
-        :param previous: List of users to append to in this run.
+        :returns: List of dicts representing users
         """
-        if previous is None:
-            previous = []
-        user_id_url = "{}/api/v1/users".format(self.base_url)
-        payload = {"limit": 100, "offset": len(previous)}
-        logging.debug("The payload for the snipe users GET is %s", payload)
-        response = self._session.get(user_id_url, json=payload)
-        response_json = response.json()
-        current = response_json["rows"]
-        if len(previous) != 0:
-            current = previous + current
-        if response_json["total"] > len(current):
-            logging.debug(
-                "We have more than 100 users, get the next page - total: %s current: %s",
-                response_json["total"],
-                len(current),
-            )
-            return self.get_snipe_users(previous=current)
-        return current
+        return self._get_paginated_endpoint("/api/v1/users")
 
     def get_snipe_user_id(self, username, user_list, do_not_search):
         """Get a Snipe-IT user's unique identifier given their username.
@@ -441,16 +455,17 @@ class Snipe:
         )
         return response
 
+    def get_manufacturers(self):
+        """Returns a list of manufacturers in snipe-it"""
+        return self._get_paginated_endpoint("/api/v1/manufacturers")
+
     def get_snipe_apple_manufacturer(self):
         """ Returns the integer ID of the "Apple" manufacturer in snipe-it.
 
         Raises ValueError if the "Apple" manufacturer is not found.
         """
-        # TODO: Handle pagination of the /manufacturers endpoint
         logging.info("Searching for the manufacturer with the name 'Apple'")
-        api_url = "{}/api/v1/manufacturers".format(self.base_url)
-        response = self._session.get(api_url)
-        for manufacturer in response.json()["rows"]:
+        for manufacturer in self.get_manufacturers():
             if manufacturer["name"].casefold() == "apple":
                 manufacturer_id = manufacturer["id"]
                 logging.info(

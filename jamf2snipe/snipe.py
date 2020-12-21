@@ -79,17 +79,21 @@ class Snipe:
         :raises AuthorizationIncorrect:
             Our API key is incorrect.
 
+        :returns: True in case of success, raises in any other case
+
         .. _requests.exceptions: https://requests.readthedocs.io/en/master/_modules/requests/exceptions/
         """
 
-        # Don't use the Session since it has the request handler installed
-        req = requests.get(self.base_url + "/api/v1/users", params={"limit": 1})
-        if req.status_code == 302:
-            # Probably the redirection to /login, our API key is incorrect
+        req = self._session.get(self.base_url + "/api/v1/users", params={"limit": 1})
+        if req.status_code == 200:
+            return True
+        if req.status_code == 401:
             raise AuthorizationIncorrect(
-                "Call to /api/v1/users resulted in a redirect, ensure your Snipe-IT API key is correct."
+                "Call to /api/v1/users failed, ensure your Snipe-IT API key is correct."
             )
+        logging.error("An unknown error occurred while checking the Snipe-IT connection. Is the URL correct?")
         req.raise_for_status()
+        raise SnipeItError("Snipe-IT API returned HTTP {}. {}".format(req.status_code, req.text))
 
     def search_snipe_asset(self, serial):
         """Looks up an asset by its serial number in Snipe-IT.

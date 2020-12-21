@@ -286,11 +286,11 @@ def main():
     logging.info("Getting a list of computer models that snipe knows about.")
     snipemodels = snipe_it.get_models()
     logging.debug(
-        "Parsing the %s model results for models with model numbers.",
-        len(snipemodels["rows"]),
+        "Parsing the %i model results for models with model numbers.",
+        len(snipemodels),
     )
     model_numbers = {}
-    for model in snipemodels["rows"]:
+    for model in snipemodels:
         if model["model_number"] == "":
             logging.debug(
                 "The model, %s, did not have a model number. Skipping.", model["name"]

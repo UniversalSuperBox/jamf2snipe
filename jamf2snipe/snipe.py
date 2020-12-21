@@ -181,40 +181,9 @@ class Snipe:
     def get_models(self):
         """Looks up all of the asset models in Snipe-IT.
 
-        Returns a dict object matching https://snipe-it.readme.io/reference#models
-
-        Exits the program on errors.
+        Returns a List of dicts representing models.
         """
-        api_url = "{}/api/v1/models".format(self.base_url)
-        logging.debug("Calling against: %s", api_url)
-        response = self._session.get(api_url)
-        if response.status_code == 200:
-            jsonresponse = response.json()
-            logging.info(
-                "Got a valid response that should have %s models.",
-                jsonresponse["total"],
-            )
-            if jsonresponse["total"] <= len(jsonresponse["rows"]):
-                return jsonresponse
-            logging.info("We didn't get enough results so we need to get them again.")
-            api_url = "{}/api/v1/models?limit={}".format(
-                self.base_url, jsonresponse["total"]
-            )
-            response = self._session.get(api_url)
-            if response.status_code == 200:
-                newjsonresponse = response.json()
-                if newjsonresponse["total"] == len(newjsonresponse["rows"]):
-                    return newjsonresponse
-                logging.error("We couldn't seem to get all of the model numbers")
-                raise NotImplementedError(
-                    "This script is unable to get more than two pages of models, and it appears your instance has more."
-                )
-        logging.error(
-            "When we tried to retreive a list of models, Snipe-IT responded with error status code:%s - %s",
-            response.status_code,
-            response.content,
-        )
-        raise SnipeItError("Snipe models API endpoint failed.")
+        return self._get_paginated_endpoint("/api/v1/models")
 
     def get_users(self):
         """Get a list of all users in Snipe-IT.

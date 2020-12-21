@@ -16,14 +16,17 @@ LICENSE:
 CONFIGURATION:
     These settings are commonly found in the settings.conf file.
 
-    This setting sets the Snipe Asset status when creating a new asset. By default it's set to 4 (Pending).
+    This setting sets the Snipe Asset status when creating a new asset. By
+    default it's set to 4 (Pending).
     defaultStatus = 4
 
-    You can associate snipe hardware keys in the [api-mapping] section, to to a JAMF keys so it associates
-    the jamf values into snipe. The default example associates information that exists by default in both
-    Snipe and JAMF.  The Key value is the exact name of the snipe key name.
-    Value1 is the "Subset" (JAMF's wording not mine) name, and the Value2 is the JAMF key name.
-    Note that MAC Address are a custom value in SNIPE by default and you can use it as an example.
+    You can associate snipe hardware keys in the [api-mapping] section to JAMF
+    key so it associates the jamf values into snipe. The default example
+    associates information that exists by default in both Snipe and JAMF. The
+    Key value is the exact name of the snipe key name. Value1 is the "Subset"
+    (JAMF's wording not mine) name, and the Value2 is the JAMF key name. Note
+    that MAC Address are a custom value in SNIPE by default and you can use it
+    as an example.
 
     [api-mapping]
         name = general name

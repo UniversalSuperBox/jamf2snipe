@@ -40,7 +40,9 @@ class Jamf:
             The given API credentials were not correct, or the given user does
             not have access to the mobiledevices endpoint.
 
-        :returns: True if the connection succeeded, raises an error in any other case.
+        :returns:
+            True if the connection succeeded, raises an error in any other
+            case.
         """
         mobile_resp = self._session.get(
             "{0}/JSSResource/mobiledevices/-1".format(self.base_url)
@@ -91,12 +93,7 @@ class Jamf:
         return r
 
     def get_computers(self):
-        """Retrieves a list of all computers from the JAMF instance.
-
-        :param session:
-            requests.Session object to use for this request. This session must have
-            all headers needed for the request, including authorization headers.
-        """
+        """Retrieves a list of all computers from the JAMF instance."""
         api_url = "{0}/JSSResource/computers".format(self.base_url)
         logging.debug(
             "Calling for JAMF computers against: %s\n The username, passwords, and headers for this GET requestcan be found near the beginning of the output.",
@@ -115,14 +112,7 @@ class Jamf:
         return None
 
     def get_mobile_devices(self):
-        """Retrieves a list of all mobile devices from the JAMF instance.
-
-        The JAMF instance is specified by the global variable ``self.base_url``
-
-        :param session:
-            requests.Session object to use for this request. This session must have
-            all headers needed for the request, including authorization headers.
-        """
+        """Retrieves a list of all mobile devices from the JAMF instance."""
         api_url = "{0}/JSSResource/mobiledevices".format(self.base_url)
         logging.debug(
             "Calling for JAMF mobiles against: %s\n The username, passwords, and headers for this GET requestcan be found near the beginning of the output.",
@@ -141,14 +131,7 @@ class Jamf:
         return None
 
     def get_computer(self, jamf_id):
-        """Retrieves a single computer from the JAMF instance by ID.
-
-        :param jamf_id: JAMF instance's unique ID value identifying this computer.
-
-        :param session:
-            requests.Session object to use for this request. This session must have
-            all headers needed for the request, including authorization headers.
-        """
+        """Retrieves a single computer from the JAMF instance by ID."""
         api_url = "{}/JSSResource/computers/id/{}".format(self.base_url, jamf_id)
         response = self._session.get(api_url)
         if response.status_code == 200:
@@ -192,14 +175,12 @@ class Jamf:
     def update_computer_asset_tag(self, jamf_id, asset_tag):
         """Updates the asset tag field on a single computer in JAMF.
 
-        :param jamf_id: JAMF instance's unique ID value identifying this computer.
+        :param jamf_id:
+            JAMF instance's unique ID value identifying this computer.
 
-        :param asset_tag: The new value for the asset tag field for this computer
-            in the JAMF instance.
-
-        :param session:
-            requests.Session object to use for this request. This session must have
-            all headers needed for the request, including authorization headers.
+        :param asset_tag:
+            The new value for the asset tag field for this computer in the
+            JAMF instance.
         """
         api_url = "{}/JSSResource/computers/id/{}".format(self.base_url, jamf_id)
         payload = """<?xml version="1.0" encoding="UTF-8"?><computer><general><id>{}</id><asset_tag>{}</asset_tag></general></computer>""".format(
@@ -229,15 +210,12 @@ class Jamf:
     def update_mobile_device_asset_tag(self, jamf_id, asset_tag):
         """Updates the asset tag field on a single mobile device in JAMF.
 
-        :param jamf_id: JAMF instance's unique ID value identifying this mobile
-            device.
+        :param jamf_id:
+            JAMF instance's unique ID value identifying this mobile device.
 
-        :param asset_tag: The new value for the asset tag field for this mobile
-            device in the JAMF instance.
-
-        :param session:
-            requests.Session object to use for this request. This session must have
-            all headers needed for the request, including authorization headers.
+        :param asset_tag:
+            The new value for the asset tag field for this mobile device in
+            the JAMF instance.
         """
         api_url = "{}/JSSResource/mobiledevices/id/{}".format(self.base_url, jamf_id)
         payload = """<?xml version="1.0" encoding="UTF-8"?><mobile_device><general><id>{}</id><asset_tag>{}</asset_tag></general></mobile_device>""".format(

@@ -69,8 +69,8 @@ class Snipe:
         """Ensures that my connection settings are correct.
 
         Attempts to contact the Snipe-IT API and raises an exception if it
-        fails. If no exception was raised, it is probably safe to continue using
-        this Snipe object instance.
+        fails. If no exception was raised, it is probably safe to continue
+        using this Snipe object instance.
 
         This may raise any of the exceptions found in `requests.exceptions`_.
 
@@ -100,10 +100,11 @@ class Snipe:
     def search_asset(self, serial):
         """Looks up an asset by its serial number in Snipe-IT.
 
-        Snipe-IT does not enforce uniqueness of the serial number, so it may return
-        more than one asset for the search.
+        Snipe-IT does not enforce uniqueness of the serial number, so it may
+        return more than one asset for the search.
 
-        :returns: If a single match is found, a dict object representing the match
+        :returns:
+            If a single match is found, a dict object representing the match
             is returned.
 
             If no match is found, the string ``"NoMatch"`` is returned.
@@ -235,7 +236,8 @@ class Snipe:
     def create_model(self, payload):
         """Creates a new model in Snipe-IT.
 
-        :param payload: JSON to send directly to the models endpoint in Snipe-IT.
+        :param payload:
+            JSON to send directly to the models endpoint in Snipe-IT.
 
         :returns: The new model's unique identifier (id) value in Snipe-IT.
 
@@ -259,12 +261,13 @@ class Snipe:
     def create_asset(self, payload):
         """Creates a new asset in Snipe-IT.
 
-        :param payload: JSON to send directly to the models endpoint in Snipe-IT.
+        :param payload:
+            JSON to send directly to the models endpoint in Snipe-IT.
 
         :returns:
-            A tuple of the format ``(status, response)`` where ``status`` is the
-            string ``"AssetCreated"`` and ``response`` is the requests.Response
-            object returned for the requst.
+            A tuple of the format ``(status, response)`` where ``status`` is
+            the string ``"AssetCreated"`` and ``response`` is the
+            requests.Response object returned for the request.
         """
         api_url = "{}/api/v1/hardware".format(self.base_url)
         logging.debug(
@@ -287,9 +290,11 @@ class Snipe:
     def update_asset(self, snipe_id, payload):
         """Updates an existing asset in Snipe-IT.
 
-        :param snipe_id: Unique identifier of the object to update in Snipe-IT.
+        :param snipe_id:
+            Unique identifier of the object to update in Snipe-IT.
 
-        :param payload: JSON to send directly to the models endpoint in Snipe-IT.
+        :param payload:
+            JSON to send directly to the models endpoint in Snipe-IT.
 
         :returns: True if the update was successful, False if it was not.
         """
@@ -336,12 +341,13 @@ class Snipe:
     def checkin_asset(self, asset_id):
         """Checks in a single asset in Snipe-IT, removing its assignee.
 
-        :param asset_id: Unique identifier of the object to update in Snipe-IT.
+        :param asset_id:
+            Unique identifier of the object to update in Snipe-IT.
 
         :returns:
             The string ``"CheckedOut"`` if the checkin was successful, the
-            ``requests.Response`` object returned by the request if the checkin was
-            not successful.
+            ``requests.Response`` object returned by the request if the
+            checkin was not successful.
         """
         api_url = "{}/api/v1/hardware/{}/checkin".format(self.base_url, asset_id)
         payload = {"note": "checked in by script from Jamf"}
@@ -369,7 +375,8 @@ class Snipe:
 
         :param user: Username of the user to check this asset out to.
 
-        :param asset_id: Unique identifier of the object to update in Snipe-IT.
+        :param asset_id:
+            Unique identifier of the object to update in Snipe-IT.
 
         :param user_list: A list of users returned by get_snipe_users.
 
@@ -378,9 +385,9 @@ class Snipe:
             username if we were completely unable to find them in user_dict.
 
         :param checked_out_user:
-            Unique identifier (``"id"``) of the user which this asset is checked
-            out to at call time, or ``"NewAsset"`` if this asset was just
-            created.
+            Unique identifier (``"id"``) of the user which this asset is
+            checked out to at call time, or ``"NewAsset"`` if this asset was
+            just created.
 
         :param default_user:
             Unique identifier (``"id"``) of user to check this asset out to if
@@ -391,8 +398,8 @@ class Snipe:
 
             ``"CheckedOut"`` if the asset was checked out successfully.
 
-            The ``requests.Response`` object returned by the checkout request if
-            it was not successful.
+            The ``requests.Response`` object returned by the checkout request
+            if it was not successful.
         """
         logging.debug("Asset %s is being checked out to %s", user, asset_id)
         if user:

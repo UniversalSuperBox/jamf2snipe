@@ -265,9 +265,10 @@ class Snipe:
             JSON to send directly to the models endpoint in Snipe-IT.
 
         :returns:
-            A tuple of the format ``(status, response)`` where ``status`` is
-            the string ``"AssetCreated"`` and ``response`` is the
-            requests.Response object returned for the request.
+            Created asset as a dict.
+
+        :raises AssetCreationError:
+            Snipe-IT returned anything but a success.
         """
         api_url = "{}/api/v1/hardware".format(self.base_url)
         logging.debug(
@@ -277,15 +278,11 @@ class Snipe:
         )
         response = self._session.post(api_url, json=payload)
         logging.debug(response.text)
-        if response.status_code == 200:
+        response_json = response.json()
+        if response.status_code == 200 and response_json["status"] == "success":
             logging.debug("Got back status code: 200 - %s", response.content)
-            return "AssetCreated", response
-        logging.error(
-            "Asset creation failed for asset %s with error %s",
-            payload["name"],
-            response.text,
-        )
-        return response
+            return response_json["payload"]
+        raise AssetCreationError(response.text)
 
     def update_asset(self, snipe_id, payload):
         """Updates an existing asset in Snipe-IT.
@@ -475,3 +472,7 @@ class AuthorizationIncorrect(SnipeItError):
 
 class RateLimitError(Exception):
     """Thrown when Snipe-IT returns a rate limit error that we could not handle"""
+
+
+class AssetCreationError(SnipeItError):
+    """Thrown when creating a Snipe-IT asset fails"""

@@ -490,8 +490,14 @@ def main():
                         "The serial number is not available in JAMF. This is normal for DEP enrolled devices that have not yet checked in for the first time. Since there's no serial number yet, we'll skip it for now."
                     )
                     continue
-                new_snipe_asset = snipe_it.create_asset(newasset)
-                if new_snipe_asset[0] != "AssetCreated":
+                try:
+                    new_snipe_asset = snipe_it.create_asset(newasset)
+                except snipe.AssetCreationError as e:
+                    logging.exception(e)
+                    logging.error(
+                        "Failed to create asset with the following payload, the error message is above: %s",
+                        newasset,
+                    )
                     continue
                 if USER_ARGS.users or USER_ARGS.users_force or USER_ARGS.users_inverse:
                     jamf_data_category, jamf_data_field = config["user-mapping"][
@@ -511,7 +517,7 @@ def main():
                     )
                     snipe_it.checkout_asset(
                         jamf_return[jamf_data_category][jamf_data_field],
-                        new_snipe_asset[1].json()["payload"]["id"],
+                        new_snipe_asset["id"],
                         snipe_users,
                         USER_ARGS.users_no_search,
                         "NewAsset",

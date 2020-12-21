@@ -1,7 +1,8 @@
 """Abstractions for Snipe-IT"""
 
 import logging
-import time
+from datetime import datetime, timezone
+from time import sleep
 
 import requests
 
@@ -26,8 +27,8 @@ class Snipe:
             }
         )
         self.base_url = base_url
-        self.snipe_api_count = 0
-        self.first_snipe_call = 0
+        self.api_count = 0
+        self.first_call = datetime.min
         self.rate_limited = rate_limited
 
     def snipe_request_handler(
@@ -39,15 +40,14 @@ class Snipe:
                 logging.warning(
                     "Despite respecting the rate limit of Snipe, we've still been limited. Trying again after sleeping for 2 seconds."
                 )
-                time.sleep(2)
+                sleep(2)
                 re_req = req.request
                 return self._session.send(re_req)
-            if self.snipe_api_count == 0:
-                self.first_snipe_call = time.time()
-                time.sleep(0.5)
-            self.snipe_api_count += 1
-            time_elapsed = time.time() - self.first_snipe_call
-            snipe_api_rate = self.snipe_api_count / time_elapsed
+            if self.first_call == datetime.min:
+                self.first_call = datetime.now(tz=timezone.utc)
+            self.api_count += 1
+            time_elapsed = datetime.now(tz=timezone.utc) - self.first_call
+            snipe_api_rate = self.api_count / time_elapsed.total_seconds()
             if snipe_api_rate > 1.95:
                 sleep_time = 0.5 + (snipe_api_rate - 1.95)
                 logging.debug(
@@ -55,10 +55,10 @@ class Snipe:
                     snipe_api_rate,
                     sleep_time,
                 )
-                time.sleep(sleep_time)
+                sleep(sleep_time)
             logging.debug(
                 "Made %s requests to Snipe IT in %s seconds, with a request being sent every %s seconds",
-                self.snipe_api_count,
+                self.api_count,
                 time_elapsed,
                 snipe_api_rate,
             )

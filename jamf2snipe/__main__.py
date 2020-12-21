@@ -33,17 +33,17 @@ CONFIGURATION:
     A list of valid subsets can be found in the 'validsubset' variable
 """
 validsubset = [
-        "general",
-        "location",
-        "purchasing",
-        "peripherals",
-        "hardware",
-        "certificates",
-        "software",
-        "extension_attributes",
-        "groups_accounts",
-        "iphones",
-        "configuration_profiles"
+    "general",
+    "location",
+    "purchasing",
+    "peripherals",
+    "hardware",
+    "certificates",
+    "software",
+    "extension_attributes",
+    "groups_accounts",
+    "iphones",
+    "configuration_profiles",
 ]
 
 
@@ -60,21 +60,83 @@ import jamf
 
 # Set us up for using runtime arguments by defining them.
 runtimeargs = argparse.ArgumentParser()
-runtimeargs.add_argument("-v", "--verbose", help="Sets the logging level to INFO and gives you a better idea of what the script is doing.", action="store_true")
-runtimeargs.add_argument("--dryrun", help="This checks your config and tries to contact both the JAMFPro and Snipe-it instances, but exits before updating or syncing any assets.", action="store_true")
-runtimeargs.add_argument("-d", "--debug", help="Sets logging to include additional DEBUG messages.", action="store_true")
-runtimeargs.add_argument("--do_not_update_jamf", help="Does not update Jamf with the asset tags stored in Snipe.", action="store_false")
-runtimeargs.add_argument('--do_not_verify_ssl', help="Skips SSL verification for all requests. Helpful when you use self-signed certificate.", action="store_true")
-runtimeargs.add_argument("-r", "--ratelimited", help="Puts a half second delay between Snipe IT API calls to adhere to the standard 120/minute rate limit", action="store_true")
-runtimeargs.add_argument("-f", "--force", help="Updates the Snipe asset with information from Jamf every time, despite what the timestamps indicate.", action="store_true")
+runtimeargs.add_argument(
+    "-v",
+    "--verbose",
+    help="Sets the logging level to INFO and gives you a better idea of what the script is doing.",
+    action="store_true",
+)
+runtimeargs.add_argument(
+    "--dryrun",
+    help="This checks your config and tries to contact both the JAMFPro and Snipe-it instances, but exits before updating or syncing any assets.",
+    action="store_true",
+)
+runtimeargs.add_argument(
+    "-d",
+    "--debug",
+    help="Sets logging to include additional DEBUG messages.",
+    action="store_true",
+)
+runtimeargs.add_argument(
+    "--do_not_update_jamf",
+    help="Does not update Jamf with the asset tags stored in Snipe.",
+    action="store_false",
+)
+runtimeargs.add_argument(
+    "--do_not_verify_ssl",
+    help="Skips SSL verification for all requests. Helpful when you use self-signed certificate.",
+    action="store_true",
+)
+runtimeargs.add_argument(
+    "-r",
+    "--ratelimited",
+    help="Puts a half second delay between Snipe IT API calls to adhere to the standard 120/minute rate limit",
+    action="store_true",
+)
+runtimeargs.add_argument(
+    "-f",
+    "--force",
+    help="Updates the Snipe asset with information from Jamf every time, despite what the timestamps indicate.",
+    action="store_true",
+)
 user_opts = runtimeargs.add_mutually_exclusive_group()
-user_opts.add_argument("-u", "--users", help="Checks out the item to the current user in Jamf if it's not already deployed", action="store_true")
-user_opts.add_argument("-ui", "--users_inverse", help="Checks out the item to the current user in Jamf if it's already deployed", action="store_true")
-user_opts.add_argument("-uf", "--users_force", help="Checks out the item to the user specified in Jamf no matter what", action="store_true")
-user_opts.add_argument("-uns", "--users_no_search", help="Doesn't search for any users if the specified fields in Jamf and Snipe don't match. (case insensitive)", action="store_true")
+user_opts.add_argument(
+    "-u",
+    "--users",
+    help="Checks out the item to the current user in Jamf if it's not already deployed",
+    action="store_true",
+)
+user_opts.add_argument(
+    "-ui",
+    "--users_inverse",
+    help="Checks out the item to the current user in Jamf if it's already deployed",
+    action="store_true",
+)
+user_opts.add_argument(
+    "-uf",
+    "--users_force",
+    help="Checks out the item to the user specified in Jamf no matter what",
+    action="store_true",
+)
+user_opts.add_argument(
+    "-uns",
+    "--users_no_search",
+    help="Doesn't search for any users if the specified fields in Jamf and Snipe don't match. (case insensitive)",
+    action="store_true",
+)
 type_opts = runtimeargs.add_mutually_exclusive_group()
-type_opts.add_argument("-m", "--mobiles", help="Runs against the Jamf mobiles endpoint only.", action="store_true")
-type_opts.add_argument("-c", "--computers", help="Runs against the Jamf computers endpoint only.", action="store_true")
+type_opts.add_argument(
+    "-m",
+    "--mobiles",
+    help="Runs against the Jamf mobiles endpoint only.",
+    action="store_true",
+)
+type_opts.add_argument(
+    "-c",
+    "--computers",
+    help="Runs against the Jamf computers endpoint only.",
+    action="store_true",
+)
 USER_ARGS = runtimeargs.parse_args()
 
 # Notify users they're going to get a wall of text in verbose mode.
@@ -94,65 +156,93 @@ logging.info("Searching for a valid settings.conf file.")
 config = configparser.ConfigParser()
 logging.debug("Checking for a settings.conf in /opt/jamf2snipe ...")
 config.read("/opt/jamf2snipe/settings.conf")
-if 'snipe-it' not in set(config):
-    logging.debug("No valid config found in: /opt Checking for a settings.conf in /etc/jamf2snipe ...")
-    config.read('/etc/jamf2snipe/settings.conf')
-if 'snipe-it' not in set(config):
-    logging.debug("No valid config found in /etc Checking for a settings.conf in current directory ...")
+if "snipe-it" not in set(config):
+    logging.debug(
+        "No valid config found in: /opt Checking for a settings.conf in /etc/jamf2snipe ..."
+    )
+    config.read("/etc/jamf2snipe/settings.conf")
+if "snipe-it" not in set(config):
+    logging.debug(
+        "No valid config found in /etc Checking for a settings.conf in current directory ..."
+    )
     config.read("settings.conf")
-if 'snipe-it' not in set(config):
+if "snipe-it" not in set(config):
     logging.debug("No valid config found in current folder.")
-    logging.error("No valid settings.conf was found. We'll need to quit while you figure out where the settings are at. You can check the README for valid locations.")
+    logging.error(
+        "No valid settings.conf was found. We'll need to quit while you figure out where the settings are at. You can check the README for valid locations."
+    )
     raise SystemExit("Error: No valid settings.conf - Exiting.")
 
-logging.info("Great, we found a settings file. Let's get started by parsing all fo the settings.")
+logging.info(
+    "Great, we found a settings file. Let's get started by parsing all fo the settings."
+)
 
 # Set some Variables from the settings.conf:
 # This is the address, cname, or FQDN for your JamfPro instance.
-JAMF_BASE = config['jamf']['url']
+JAMF_BASE = config["jamf"]["url"]
 logging.info("The configured JAMFPro base url is: %s", JAMF_BASE)
-JAMF_API_USER = config['jamf']['username']
-logging.info("The configured JAMFPro username we'll be connecting with is: %s", JAMF_API_USER)
-JAMF_API_PASSWORD = config['jamf']['password']
+JAMF_API_USER = config["jamf"]["username"]
+logging.info(
+    "The configured JAMFPro username we'll be connecting with is: %s", JAMF_API_USER
+)
+JAMF_API_PASSWORD = config["jamf"]["password"]
 logging.debug("The configured password to access the API is: %s", JAMF_API_PASSWORD)
 
 # This is the address, cname, or FQDN for your snipe-it instance.
-defaultStatus = config['snipe-it']['defaultStatus']
-logging.info("The default status we'll be setting updated computer to is: %s (I sure hope this is a number or something is probably wrong)", defaultStatus)
+defaultStatus = config["snipe-it"]["defaultStatus"]
+logging.info(
+    "The default status we'll be setting updated computer to is: %s (I sure hope this is a number or something is probably wrong)",
+    defaultStatus,
+)
 
-#TODO: Fail if defaultStatus is not an integer, assuming Snipe-IT can't accept anything but integer statuses.
+# TODO: Fail if defaultStatus is not an integer, assuming Snipe-IT can't accept anything but integer statuses.
 
 ### Setup Some Functions ###
 SNIPE_API_COUNT = 0
 FIRST_SNIPE_CALL = None
 RATE_LIMIT_SNIPE = USER_ARGS.ratelimited
 
+
 def main():
     # Do some tests to see if the user has updated their settings.conf file
     settings_correct = True
-    if 'api-mapping' in config:
-        logging.error("Looks like you're using the old method for api-mapping. Please use computers-api-mapping and mobile_devices-api-mapping.")
+    if "api-mapping" in config:
+        logging.error(
+            "Looks like you're using the old method for api-mapping. Please use computers-api-mapping and mobile_devices-api-mapping."
+        )
         settings_correct = False
-    if 'user-mapping' not in config and (USER_ARGS.users or USER_ARGS.users_force or USER_ARGS.users_inverse):
-        logging.error("""You've chosen to check out assets to users in some capacity using a cmdline switch, but not specified how you want to
-        search Snipe IT for the users from Jamf. Make sure you have a 'user-mapping' section in your settings.conf file.""")
+    if "user-mapping" not in config and (
+        USER_ARGS.users or USER_ARGS.users_force or USER_ARGS.users_inverse
+    ):
+        logging.error(
+            """You've chosen to check out assets to users in some capacity using a cmdline switch, but not specified how you want to
+        search Snipe IT for the users from Jamf. Make sure you have a 'user-mapping' section in your settings.conf file."""
+        )
         settings_correct = False
 
     if not settings_correct:
         raise SystemExit
 
     # Check the config file for valid jamf subsets. This is based off the JAMF API and if it's not right we can't map fields over to SNIPE properly.
-    logging.debug("Checking the settings.conf file for valid JAMF subsets of the JAMF API so mapping can occur properly.")
-    for key in config['computers-api-mapping']:
-        jamfsplit = config['computers-api-mapping'][key].split()
+    logging.debug(
+        "Checking the settings.conf file for valid JAMF subsets of the JAMF API so mapping can occur properly."
+    )
+    for key in config["computers-api-mapping"]:
+        jamfsplit = config["computers-api-mapping"][key].split()
         if jamfsplit[0] in validsubset:
-            logging.info('Found subset %s: Acceptable', jamfsplit[0])
+            logging.info("Found subset %s: Acceptable", jamfsplit[0])
             continue
-        logging.error("Found invalid subset: %s in the settings.conf file.\nThis is not in the acceptable list of subsets. Check your settings.conf\n Valid subsets are: %s", jamfsplit[0], ', '.join(validsubset))
+        logging.error(
+            "Found invalid subset: %s in the settings.conf file.\nThis is not in the acceptable list of subsets. Check your settings.conf\n Valid subsets are: %s",
+            jamfsplit[0],
+            ", ".join(validsubset),
+        )
         raise SystemExit("Invalid Subset found in settings.conf")
 
-    snipe_it = snipe.Snipe(config['snipe-it']['url'], config['snipe-it']['apiKey'])
-    jamf_api = jamf.Jamf(config['jamf']['url'], config['jamf']['username'], config['jamf']['password'])
+    snipe_it = snipe.Snipe(config["snipe-it"]["url"], config["snipe-it"]["apiKey"])
+    jamf_api = jamf.Jamf(
+        config["jamf"]["url"], config["jamf"]["username"], config["jamf"]["password"]
+    )
 
     # Make sure our services are up
     logging.info("SSL Verification is set to: %s", not USER_ARGS.do_not_verify_ssl)
@@ -160,14 +250,14 @@ def main():
     try:
         snipe_it.check_connection()
         snipe_up = True
-    except Exception as exception: #pylint: disable=broad-except
+    except Exception as exception:  # pylint: disable=broad-except
         logging.exception(exception)
         snipe_up = False
 
     try:
         jamf_api.check_connection()
         jamf_up = True
-    except Exception as exception: #pylint: disable=broad-except
+    except Exception as exception:  # pylint: disable=broad-except
         logging.exception(exception)
         jamf_up = False
 
@@ -179,35 +269,45 @@ def main():
     ### Get Started ###
     # Retrieve the ID of the manufacturer with the name "Apple", either from config
     # or from Snipe-IT
-    apple_manufacturer_id = config['snipe-it'].get('manufacturer_id', None)
+    apple_manufacturer_id = config["snipe-it"].get("manufacturer_id", None)
     if apple_manufacturer_id is None:
         try:
             apple_manufacturer_id = snipe_it.get_apple_manufacturer()
         except ValueError:
-            logging.critical("Failed to find a manufacturer on your Snipe instance with the name 'Apple' and you did not set one in the configuration file. Make sure the 'Apple' manufacturer exists or set the manufacturer_id in settings.conf.")
+            logging.critical(
+                "Failed to find a manufacturer on your Snipe instance with the name 'Apple' and you did not set one in the configuration file. Make sure the 'Apple' manufacturer exists or set the manufacturer_id in settings.conf."
+            )
             sys.exit(1)
-    logging.debug("Snipe-IT 'Apple' Manufacturer ID is set to %s", apple_manufacturer_id)
+    logging.debug(
+        "Snipe-IT 'Apple' Manufacturer ID is set to %s", apple_manufacturer_id
+    )
 
     # Get a list of known models from Snipe
     logging.info("Getting a list of computer models that snipe knows about.")
     snipemodels = snipe_it.get_models()
-    logging.debug("Parsing the %s model results for models with model numbers.", len(snipemodels['rows']))
+    logging.debug(
+        "Parsing the %s model results for models with model numbers.",
+        len(snipemodels["rows"]),
+    )
     model_numbers = {}
-    for model in snipemodels['rows']:
-        if model['model_number'] == "":
-            logging.debug("The model, %s, did not have a model number. Skipping.", model['name'])
+    for model in snipemodels["rows"]:
+        if model["model_number"] == "":
+            logging.debug(
+                "The model, %s, did not have a model number. Skipping.", model["name"]
+            )
             continue
-        model_numbers[model['model_number']] = model['id']
+        model_numbers[model["model_number"]] = model["id"]
     logging.info("Our list of models has %s entries.", len(model_numbers))
-    logging.debug("Here's the list of the %s models and their id's that we were able to collect:\n%s", len(model_numbers), model_numbers)
+    logging.debug(
+        "Here's the list of the %s models and their id's that we were able to collect:\n%s",
+        len(model_numbers),
+        model_numbers,
+    )
 
     # Get the IDS of all active assets.
     jamf_computer_list = jamf_api.get_computers()
     jamf_mobile_list = jamf_api.get_mobile_devices()
-    jamf_types = {
-        'computers': jamf_computer_list,
-        'mobile_devices': jamf_mobile_list
-    }
+    jamf_types = {"computers": jamf_computer_list, "mobile_devices": jamf_mobile_list}
 
     # Get a list of users from Snipe if the user has specified
     # they're syncing users
@@ -219,18 +319,22 @@ def main():
 
     total_assets = 0
     if USER_ARGS.computers:
-        total_assets = len(jamf_types['computers']['computers'])
+        total_assets = len(jamf_types["computers"]["computers"])
     elif USER_ARGS.mobiles:
-        total_assets = len(jamf_types['mobile_devices']['mobile_devices'])
+        total_assets = len(jamf_types["mobile_devices"]["mobile_devices"])
     else:
         for jamf_type in jamf_types:
             total_assets += len(jamf_types[jamf_type][jamf_type])
 
     # Make sure we have a good list.
     if jamf_computer_list is not None:
-        logging.info('Received a list of JAMF assets that had %s entries.', total_assets)
+        logging.info(
+            "Received a list of JAMF assets that had %s entries.", total_assets
+        )
     else:
-        logging.error("We were not able to retreive a list of assets from your JAMF instance. It's likely that your settings, or credentials are incorrect. Check your settings.conf and verify you can make API calls outside of this system with the credentials found in your settings.conf")
+        logging.error(
+            "We were not able to retreive a list of assets from your JAMF instance. It's likely that your settings, or credentials are incorrect. Check your settings.conf and verify you can make API calls outside of this system with the credentials found in your settings.conf"
+        )
         raise SystemExit("Unable to get JAMF Computers.")
 
     # After this point we start editing data, so quit if this is a dryrun
@@ -238,129 +342,226 @@ def main():
         raise SystemExit("Dryrun: Complete.")
 
     # From this point on, we're editing data.
-    logging.info('Starting to Update Inventory')
+    logging.info("Starting to Update Inventory")
     current_asset = 0
 
     for jamf_type in jamf_types:
         if USER_ARGS.computers:
-            if jamf_type != 'computers':
+            if jamf_type != "computers":
                 continue
         if USER_ARGS.mobiles:
-            if jamf_type != 'mobile_devices':
+            if jamf_type != "mobile_devices":
                 continue
         for jamf_asset in jamf_types[jamf_type][jamf_type]:
             current_asset += 1
-            logging.info("Processing entry %s out of %s - JAMFID: %s - NAME: %s", current_asset, total_assets, jamf_asset['id'], jamf_asset['name'])
+            logging.info(
+                "Processing entry %s out of %s - JAMFID: %s - NAME: %s",
+                current_asset,
+                total_assets,
+                jamf_asset["id"],
+                jamf_asset["name"],
+            )
             # Search through the list by ID for all asset information\
-            if jamf_type == 'computers':
-                jamf_return = jamf_api.get_computer(jamf_asset['id'])
-            elif jamf_type == 'mobile_devices':
-                jamf_return = jamf_api.get_mobile_device(jamf_asset['id'])
+            if jamf_type == "computers":
+                jamf_return = jamf_api.get_computer(jamf_asset["id"])
+            elif jamf_type == "mobile_devices":
+                jamf_return = jamf_api.get_mobile_device(jamf_asset["id"])
             if jamf_return is None:
-                logging.warning("JAMF did not return a device for ID %s for type %s", jamf_asset['id'], jamf_type)
+                logging.warning(
+                    "JAMF did not return a device for ID %s for type %s",
+                    jamf_asset["id"],
+                    jamf_type,
+                )
                 continue
 
             # Check that the model number exists in snipe, if not create it.
-            if jamf_type == 'computers':
-                jamf_model_identifier = jamf_return['hardware']['model_identifier']
+            if jamf_type == "computers":
+                jamf_model_identifier = jamf_return["hardware"]["model_identifier"]
                 if jamf_model_identifier not in model_numbers:
-                    logging.info("Could not find a model ID in snipe for: %s", jamf_model_identifier)
-                    newmodel = {"category_id":config['snipe-it']['computer_model_category_id'], "manufacturer_id": apple_manufacturer_id, "name": jamf_return['hardware']['model'], "model_number": jamf_model_identifier}
-                    if 'computer_custom_fieldset_id' in config['snipe-it']:
-                        fieldset_split = config['snipe-it']['computer_custom_fieldset_id']
-                        newmodel['fieldset_id'] = fieldset_split
+                    logging.info(
+                        "Could not find a model ID in snipe for: %s",
+                        jamf_model_identifier,
+                    )
+                    newmodel = {
+                        "category_id": config["snipe-it"]["computer_model_category_id"],
+                        "manufacturer_id": apple_manufacturer_id,
+                        "name": jamf_return["hardware"]["model"],
+                        "model_number": jamf_model_identifier,
+                    }
+                    if "computer_custom_fieldset_id" in config["snipe-it"]:
+                        fieldset_split = config["snipe-it"][
+                            "computer_custom_fieldset_id"
+                        ]
+                        newmodel["fieldset_id"] = fieldset_split
                     snipe_model_id = snipe_it.create_model(newmodel)
                     model_numbers[jamf_model_identifier] = snipe_model_id
-            elif jamf_type == 'mobile_devices':
-                jamf_model_identifier = jamf_return['general']['model_identifier']
+            elif jamf_type == "mobile_devices":
+                jamf_model_identifier = jamf_return["general"]["model_identifier"]
                 if jamf_model_identifier not in model_numbers:
-                    logging.info("Could not find a model ID in snipe for: %s", jamf_model_identifier)
-                    newmodel = {"category_id":config['snipe-it']['mobile_model_category_id'], "manufacturer_id": apple_manufacturer_id, "name": jamf_return['general']['model'], "model_number": jamf_model_identifier}
-                    if 'mobile_custom_fieldset_id' in config['snipe-it']:
-                        fieldset_split = config['snipe-it']['mobile_custom_fieldset_id']
-                        newmodel['fieldset_id'] = fieldset_split
+                    logging.info(
+                        "Could not find a model ID in snipe for: %s",
+                        jamf_model_identifier,
+                    )
+                    newmodel = {
+                        "category_id": config["snipe-it"]["mobile_model_category_id"],
+                        "manufacturer_id": apple_manufacturer_id,
+                        "name": jamf_return["general"]["model"],
+                        "model_number": jamf_model_identifier,
+                    }
+                    if "mobile_custom_fieldset_id" in config["snipe-it"]:
+                        fieldset_split = config["snipe-it"]["mobile_custom_fieldset_id"]
+                        newmodel["fieldset_id"] = fieldset_split
                     snipe_model_id = snipe_it.create_model(newmodel)
                     model_numbers[jamf_model_identifier] = snipe_model_id
 
             # Pass the SN from JAMF to search for a match in Snipe
-            snipe_asset = snipe_it.search_asset(jamf_return['general']['serial_number'])
+            snipe_asset = snipe_it.search_asset(jamf_return["general"]["serial_number"])
 
             # Create a new asset if there's no match:
-            if snipe_asset == 'NoMatch':
-                logging.info("Creating a new asset in snipe for JAMF ID %s - %s", jamf_return['general']['id'], jamf_return['general']['name'])
+            if snipe_asset == "NoMatch":
+                logging.info(
+                    "Creating a new asset in snipe for JAMF ID %s - %s",
+                    jamf_return["general"]["id"],
+                    jamf_return["general"]["name"],
+                )
                 # This section checks to see if the asset tag was already put into JAMF, if not it creates one with with Jamf's ID.
-                if jamf_return['general']['asset_tag'] == '':
+                if jamf_return["general"]["asset_tag"] == "":
                     jamf_asset_tag = None
-                    logging.debug('No asset tag found in Jamf, checking settings.conf for alternative specified field.')
-                    if 'asset_tag' in config['snipe-it']:
-                        tag_split = config['snipe-it']['asset_tag'].split()
+                    logging.debug(
+                        "No asset tag found in Jamf, checking settings.conf for alternative specified field."
+                    )
+                    if "asset_tag" in config["snipe-it"]:
+                        tag_split = config["snipe-it"]["asset_tag"].split()
                         try:
-                            jamf_asset_tag = jamf_return[str(tag_split[0])][str(tag_split[1])]
+                            jamf_asset_tag = jamf_return[str(tag_split[0])][
+                                str(tag_split[1])
+                            ]
                         except:
-                            raise SystemError('No such attribute {} in the jamf payload. Please check your settings.conf file'.format(tag_split))
-                    if jamf_asset_tag is None or jamf_asset_tag == '':
-                        logging.debug('No custom configuration found in settings.conf for asset tag name upon asset creation.')
-                        if jamf_type == 'mobile_devices':
-                            jamf_asset_tag = 'jamfid-m-{}'.format(jamf_return['general']['id'])
-                        elif jamf_type == 'computers':
-                            jamf_asset_tag = 'jamfid-{}'.format(jamf_return['general']['id'])
+                            raise SystemError(
+                                "No such attribute {} in the jamf payload. Please check your settings.conf file".format(
+                                    tag_split
+                                )
+                            )
+                    if jamf_asset_tag is None or jamf_asset_tag == "":
+                        logging.debug(
+                            "No custom configuration found in settings.conf for asset tag name upon asset creation."
+                        )
+                        if jamf_type == "mobile_devices":
+                            jamf_asset_tag = "jamfid-m-{}".format(
+                                jamf_return["general"]["id"]
+                            )
+                        elif jamf_type == "computers":
+                            jamf_asset_tag = "jamfid-{}".format(
+                                jamf_return["general"]["id"]
+                            )
                 else:
-                    jamf_asset_tag = jamf_return['general']['asset_tag']
-                    logging.info("Asset tag found in Jamf, setting it to: %s", jamf_asset_tag)
+                    jamf_asset_tag = jamf_return["general"]["asset_tag"]
+                    logging.info(
+                        "Asset tag found in Jamf, setting it to: %s", jamf_asset_tag
+                    )
                 # Create the payload
-                if jamf_type == 'mobile_devices':
+                if jamf_type == "mobile_devices":
                     logging.debug("Payload is being made for a mobile device")
-                    newasset = {'asset_tag': jamf_asset_tag, 'model_id': model_numbers[str(jamf_return['general']['model_identifier'])], 'name': jamf_return['general']['name'], 'status_id': defaultStatus, 'serial': jamf_return['general']['serial_number']}
-                elif jamf_type == 'computers':
+                    newasset = {
+                        "asset_tag": jamf_asset_tag,
+                        "model_id": model_numbers[
+                            str(jamf_return["general"]["model_identifier"])
+                        ],
+                        "name": jamf_return["general"]["name"],
+                        "status_id": defaultStatus,
+                        "serial": jamf_return["general"]["serial_number"],
+                    }
+                elif jamf_type == "computers":
                     logging.debug("Payload is being made for a computer")
-                    newasset = {'asset_tag': jamf_asset_tag, 'model_id': model_numbers[str(jamf_return['hardware']['model_identifier'])], 'name': jamf_return['general']['name'], 'status_id': defaultStatus, 'serial': jamf_return['general']['serial_number']}
-                if jamf_return['general']['serial_number'] == 'Not Available':
-                    logging.warning("The serial number is not available in JAMF. This is normal for DEP enrolled devices that have not yet checked in for the first time. Since there's no serial number yet, we'll skip it for now.")
+                    newasset = {
+                        "asset_tag": jamf_asset_tag,
+                        "model_id": model_numbers[
+                            str(jamf_return["hardware"]["model_identifier"])
+                        ],
+                        "name": jamf_return["general"]["name"],
+                        "status_id": defaultStatus,
+                        "serial": jamf_return["general"]["serial_number"],
+                    }
+                if jamf_return["general"]["serial_number"] == "Not Available":
+                    logging.warning(
+                        "The serial number is not available in JAMF. This is normal for DEP enrolled devices that have not yet checked in for the first time. Since there's no serial number yet, we'll skip it for now."
+                    )
                     continue
                 new_snipe_asset = snipe_it.create_asset(newasset)
                 if new_snipe_asset[0] != "AssetCreated":
                     continue
                 if USER_ARGS.users or USER_ARGS.users_force or USER_ARGS.users_inverse:
-                    jamf_data_category, jamf_data_field = config['user-mapping']['jamf_api_field'].split()
+                    jamf_data_category, jamf_data_field = config["user-mapping"][
+                        "jamf_api_field"
+                    ].split()
                     if jamf_data_field not in jamf_return[jamf_data_category]:
-                        logging.info("Couldn't find %s for this device in %s, not checking it out.", jamf_data_field, jamf_data_category)
+                        logging.info(
+                            "Couldn't find %s for this device in %s, not checking it out.",
+                            jamf_data_field,
+                            jamf_data_category,
+                        )
                         continue
-                    logging.info('Checking out new item %s to user %s', jamf_return['general']['name'], jamf_return[str(jamf_data_category)][str(jamf_data_field)])
-                    snipe_it.checkout_asset(jamf_return[jamf_data_category][jamf_data_field], new_snipe_asset[1].json()['payload']['id'], snipe_users, USER_ARGS.users_no_search, "NewAsset", default_user=config["snipe-it"].get("default_user", None))
+                    logging.info(
+                        "Checking out new item %s to user %s",
+                        jamf_return["general"]["name"],
+                        jamf_return[str(jamf_data_category)][str(jamf_data_field)],
+                    )
+                    snipe_it.checkout_asset(
+                        jamf_return[jamf_data_category][jamf_data_field],
+                        new_snipe_asset[1].json()["payload"]["id"],
+                        snipe_users,
+                        USER_ARGS.users_no_search,
+                        "NewAsset",
+                        default_user=config["snipe-it"].get("default_user", None),
+                    )
 
             # Log an error if there's an issue, or more than once match.
-            elif snipe_asset == 'MultiMatch':
-                logging.warning("WARN: You need to resolve multiple assets with the same serial number in your inventory. If you can't find them in your inventory, you might need to purge your deleted records. You can find that in the Snipe Admin settings. Skipping serial number %s for now.", jamf_return['general']['serial_number'])
-            elif snipe_asset == 'ERROR':
-                logging.error("We got an error when looking up serial number %s in snipe, which shouldn't happen at this point. Check your snipe instance and setup. Skipping for now.", jamf_return['general']['serial_number'])
+            elif snipe_asset == "MultiMatch":
+                logging.warning(
+                    "WARN: You need to resolve multiple assets with the same serial number in your inventory. If you can't find them in your inventory, you might need to purge your deleted records. You can find that in the Snipe Admin settings. Skipping serial number %s for now.",
+                    jamf_return["general"]["serial_number"],
+                )
+            elif snipe_asset == "ERROR":
+                logging.error(
+                    "We got an error when looking up serial number %s in snipe, which shouldn't happen at this point. Check your snipe instance and setup. Skipping for now.",
+                    jamf_return["general"]["serial_number"],
+                )
 
             else:
                 # Only update if JAMF has more recent info.
-                snipe_id = snipe_asset['rows'][0]['id']
-                snipe_time = snipe_asset['rows'][0]['updated_at']['datetime']
-                if jamf_type == 'computers':
-                    jamf_time = jamf_return['general']['report_date']
-                elif jamf_type == 'mobile_devices':
-                    jamf_time = jamf_return['general']['last_inventory_update']
+                snipe_id = snipe_asset["rows"][0]["id"]
+                snipe_time = snipe_asset["rows"][0]["updated_at"]["datetime"]
+                if jamf_type == "computers":
+                    jamf_time = jamf_return["general"]["report_date"]
+                elif jamf_type == "mobile_devices":
+                    jamf_time = jamf_return["general"]["last_inventory_update"]
                 # Check to see that the JAMF record is newer than the previous Snipe update, or if it is a new record in Snipe
                 if (jamf_time > snipe_time) or (USER_ARGS.force):
                     if USER_ARGS.force:
-                        logging.debug("Forced the Update regardless of the timestamps below.")
-                    logging.debug("Updating the Snipe asset because JAMF has a more recent timestamp: %s > %s or the Snipe Record is new", jamf_time, snipe_time)
-                    for snipekey in config['{}-api-mapping'.format(jamf_type)]:
-                        jamfsplit = config['{}-api-mapping'.format(jamf_type)][snipekey].split()
+                        logging.debug(
+                            "Forced the Update regardless of the timestamps below."
+                        )
+                    logging.debug(
+                        "Updating the Snipe asset because JAMF has a more recent timestamp: %s > %s or the Snipe Record is new",
+                        jamf_time,
+                        snipe_time,
+                    )
+                    for snipekey in config["{}-api-mapping".format(jamf_type)]:
+                        jamfsplit = config["{}-api-mapping".format(jamf_type)][
+                            snipekey
+                        ].split()
                         for i, item in enumerate(jamfsplit):
                             try:
                                 item = int(item)
                             except ValueError:
-                                logging.debug('%s is not an integer', item)
+                                logging.debug("%s is not an integer", item)
                             if i == 0:
                                 jamf_value = jamf_return[item]
                             else:
-                                if jamfsplit[0] == 'extension_attributes':
+                                if jamfsplit[0] == "extension_attributes":
                                     for attribute in jamf_value:
-                                        if attribute['id'] == item:
-                                            jamf_value = attribute['value']
+                                        if attribute["id"] == item:
+                                            jamf_value = attribute["value"]
                                 else:
                                     jamf_value = jamf_value[item]
                         payload = {snipekey: jamf_value}
@@ -369,53 +570,119 @@ def main():
                         # Need to check that we're not needlessly updating the asset.
                         # If it's a custom value it'll fail the first section and send it to except section that will parse custom sections.
                         try:
-                            if snipe_asset['rows'][0][snipekey] != latestvalue:
+                            if snipe_asset["rows"][0][snipekey] != latestvalue:
                                 snipe_it.update_asset(snipe_id, payload)
                             else:
-                                logging.debug("Skipping the payload, because it already exits.")
+                                logging.debug(
+                                    "Skipping the payload, because it already exits."
+                                )
                         except (KeyError, IndexError):
-                            logging.debug("The snipekey lookup failed, which means it's a custom field. Parsing those to see if it needs to be updated or not.")
+                            logging.debug(
+                                "The snipekey lookup failed, which means it's a custom field. Parsing those to see if it needs to be updated or not."
+                            )
                             needsupdate = False
-                            for custom_field in snipe_asset['rows'][0]['custom_fields']:
-                                if snipe_asset['rows'][0]['custom_fields'][custom_field]['field'] == snipekey:
-                                    if snipe_asset['rows'][0]['custom_fields'][custom_field]['value'] != latestvalue:
-                                        logging.debug("Found the field, and the value needs to be updated from %s to %s", snipe_asset['rows'][0]['custom_fields'][custom_field]['value'], latestvalue)
+                            for custom_field in snipe_asset["rows"][0]["custom_fields"]:
+                                if (
+                                    snipe_asset["rows"][0]["custom_fields"][
+                                        custom_field
+                                    ]["field"]
+                                    == snipekey
+                                ):
+                                    if (
+                                        snipe_asset["rows"][0]["custom_fields"][
+                                            custom_field
+                                        ]["value"]
+                                        != latestvalue
+                                    ):
+                                        logging.debug(
+                                            "Found the field, and the value needs to be updated from %s to %s",
+                                            snipe_asset["rows"][0]["custom_fields"][
+                                                custom_field
+                                            ]["value"],
+                                            latestvalue,
+                                        )
                                         needsupdate = True
                             if needsupdate:
                                 snipe_it.update_asset(snipe_id, payload)
                             else:
-                                logging.debug("Skipping the payload, because it already exists, or the Snipe key we're mapping to doesn't.")
-                    if ((USER_ARGS.users or USER_ARGS.users_inverse) and (snipe_asset['rows'][0]['assigned_to'] is None) == USER_ARGS.users) or USER_ARGS.users_force:
+                                logging.debug(
+                                    "Skipping the payload, because it already exists, or the Snipe key we're mapping to doesn't."
+                                )
+                    if (
+                        (USER_ARGS.users or USER_ARGS.users_inverse)
+                        and (snipe_asset["rows"][0]["assigned_to"] is None)
+                        == USER_ARGS.users
+                    ) or USER_ARGS.users_force:
 
-                        if snipe_asset['rows'][0]['status_label']['status_meta'] in ('deployable', 'deployed'):
-                            jamf_data_category, jamf_data_field = config['user-mapping']['jamf_api_field'].split()
+                        if snipe_asset["rows"][0]["status_label"]["status_meta"] in (
+                            "deployable",
+                            "deployed",
+                        ):
+                            jamf_data_category, jamf_data_field = config[
+                                "user-mapping"
+                            ]["jamf_api_field"].split()
                             if jamf_data_field not in jamf_return[jamf_data_category]:
-                                logging.info("Couldn't find %s for this device in %s, not checking it out.", jamf_data_field, jamf_data_category)
+                                logging.info(
+                                    "Couldn't find %s for this device in %s, not checking it out.",
+                                    jamf_data_field,
+                                    jamf_data_category,
+                                )
                                 continue
-                            snipe_it.checkout_asset(jamf_return[jamf_data_category][jamf_data_field], snipe_id, snipe_users, USER_ARGS.users_no_search, snipe_asset['rows'][0]['assigned_to'], default_user=config["snipe-it"].get("default_user", None))
+                            snipe_it.checkout_asset(
+                                jamf_return[jamf_data_category][jamf_data_field],
+                                snipe_id,
+                                snipe_users,
+                                USER_ARGS.users_no_search,
+                                snipe_asset["rows"][0]["assigned_to"],
+                                default_user=config["snipe-it"].get(
+                                    "default_user", None
+                                ),
+                            )
                         else:
-                            logging.info("Can't checkout %s since the status isn't set to deployable", jamf_return['general']['name'])
+                            logging.info(
+                                "Can't checkout %s since the status isn't set to deployable",
+                                jamf_return["general"]["name"],
+                            )
 
                 else:
-                    logging.info("Snipe Record is newer than the JAMF record. Nothing to sync. If this wrong, then force an inventory update in JAMF")
-                    logging.debug("Not updating the Snipe asset because Snipe has a more recent timestamp: %s < %s", jamf_time, snipe_time)
+                    logging.info(
+                        "Snipe Record is newer than the JAMF record. Nothing to sync. If this wrong, then force an inventory update in JAMF"
+                    )
+                    logging.debug(
+                        "Not updating the Snipe asset because Snipe has a more recent timestamp: %s < %s",
+                        jamf_time,
+                        snipe_time,
+                    )
 
                 # Update/Sync the Snipe Asset Tag Number back to JAMF
                 # The user arg below is set to false if it's called, so this would fail if the user called it.
-                snipe_asset_tag = snipe_asset['rows'][0]['asset_tag']
-                jamf_asset_id = jamf_return['general']['id']
-                if (jamf_return['general']['asset_tag'] != snipe_asset_tag) and USER_ARGS.do_not_update_jamf:
-                    logging.info("JAMF doesn't have the same asset tag as SNIPE so we'll update it because it should be authoritative.")
+                snipe_asset_tag = snipe_asset["rows"][0]["asset_tag"]
+                jamf_asset_id = jamf_return["general"]["id"]
+                if (
+                    jamf_return["general"]["asset_tag"] != snipe_asset_tag
+                ) and USER_ARGS.do_not_update_jamf:
+                    logging.info(
+                        "JAMF doesn't have the same asset tag as SNIPE so we'll update it because it should be authoritative."
+                    )
                     if snipe_asset_tag:
-                        if jamf_type == 'computers':
-                            jamf_api.update_computer_asset_tag(jamf_asset_id, snipe_asset_tag)
-                            logging.info("Device is a computer, updating computer record")
-                        elif jamf_type == 'mobile_devices':
-                            jamf_api.update_mobile_device_asset_tag(jamf_asset_id, snipe_asset_tag)
-                            logging.info("Device is a mobile device, updating the mobile device record")
+                        if jamf_type == "computers":
+                            jamf_api.update_computer_asset_tag(
+                                jamf_asset_id, snipe_asset_tag
+                            )
+                            logging.info(
+                                "Device is a computer, updating computer record"
+                            )
+                        elif jamf_type == "mobile_devices":
+                            jamf_api.update_mobile_device_asset_tag(
+                                jamf_asset_id, snipe_asset_tag
+                            )
+                            logging.info(
+                                "Device is a mobile device, updating the mobile device record"
+                            )
 
-    logging.debug('Total amount of API calls made to snipe-it: %i', snipe_it.api_count)
-    logging.debug('Total amount of API calls made to jamf: %i', jamf_api.api_count)
+    logging.debug("Total amount of API calls made to snipe-it: %i", snipe_it.api_count)
+    logging.debug("Total amount of API calls made to jamf: %i", jamf_api.api_count)
+
 
 if __name__ == "__main__":
     main()

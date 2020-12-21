@@ -23,7 +23,7 @@ class Jamf:
     def __init__(self, base_url, username, password):
         self._session = requests.Session()
         self._session.hooks["response"].append(self.request_handler)
-        self._session.headers.update({'Accept': 'application/json'})
+        self._session.headers.update({"Accept": "application/json"})
         self._username = username
         self._password = password
         self._session.auth = HTTPBasicAuth(self._username, self._password)
@@ -42,29 +42,48 @@ class Jamf:
 
         :returns: True if the connection succeeded, raises an error in any other case.
         """
-        mobile_resp = self._session.get('{0}/JSSResource/mobiledevices/-1'.format(self.base_url))
-        computer_resp = self._session.get('{0}/JSSResource/computers/-1'.format(self.base_url))
+        mobile_resp = self._session.get(
+            "{0}/JSSResource/mobiledevices/-1".format(self.base_url)
+        )
+        computer_resp = self._session.get(
+            "{0}/JSSResource/computers/-1".format(self.base_url)
+        )
         # ID -1 should never exist, but just in case it does, handle a 200 OK too.
         # Either response means we've authenticated successfully.
-        if (mobile_resp.status_code == 404 or computer_resp.status_code == 404
-                or mobile_resp.status_code == 200 or computer_resp.status_code == 200):
+        if (
+            mobile_resp.status_code == 404
+            or computer_resp.status_code == 404
+            or mobile_resp.status_code == 200
+            or computer_resp.status_code == 200
+        ):
             return True
-        if mobile_resp.status_code == 401 or computer_resp.status_code == 401 :
-            raise AuthorizationIncorrect("Jamf API credentials incorrect or the given user does not have access to the mobiledevices endpoint.")
-        logging.error("An unknown error occurred while checking the Jamf connection. Is the URL correct?")
+        if mobile_resp.status_code == 401 or computer_resp.status_code == 401:
+            raise AuthorizationIncorrect(
+                "Jamf API credentials incorrect or the given user does not have access to the mobiledevices endpoint."
+            )
+        logging.error(
+            "An unknown error occurred while checking the Jamf connection. Is the URL correct?"
+        )
         mobile_resp.raise_for_status()
         computer_resp.raise_for_status()
-        logging.error("An unknown error occurred while checking the Jamf connection and Requests did not raise an exception for it.")
+        logging.error(
+            "An unknown error occurred while checking the Jamf connection and Requests did not raise an exception for it."
+        )
         raise JamfError()
 
-    def request_handler(self, r, *args, **kwargs): #pylint: disable=unused-argument,invalid-name
+    def request_handler(
+        self, r, *args, **kwargs
+    ):  # pylint: disable=unused-argument,invalid-name
         """Handles rate limiting and accounting for the JAMF server."""
         if self.first_call is None:
             self.first_call = datetime.now(tz=timezone.utc)
         self.api_count += 1
-        if r.status_code != 200 and b'policies.ratelimit.QuotaViolation' in r.content:
+        if r.status_code != 200 and b"policies.ratelimit.QuotaViolation" in r.content:
             # This case should only occur with JAMF's developer portal
-            logging.warning('JAMFPro Ratelimit exceeded - error code %s. Pausing for 75 seconds.', r.status_code)
+            logging.warning(
+                "JAMFPro Ratelimit exceeded - error code %s. Pausing for 75 seconds.",
+                r.status_code,
+            )
             sleep(75)
             logging.info("Finished waiting. Retrying lookup...")
             newresponse = self._session.send(r.request)
@@ -78,13 +97,20 @@ class Jamf:
             requests.Session object to use for this request. This session must have
             all headers needed for the request, including authorization headers.
         """
-        api_url = '{0}/JSSResource/computers'.format(self.base_url)
-        logging.debug('Calling for JAMF computers against: %s\n The username, passwords, and headers for this GET requestcan be found near the beginning of the output.', api_url)
+        api_url = "{0}/JSSResource/computers".format(self.base_url)
+        logging.debug(
+            "Calling for JAMF computers against: %s\n The username, passwords, and headers for this GET requestcan be found near the beginning of the output.",
+            api_url,
+        )
         response = self._session.get(api_url)
         if response.status_code == 200:
             logging.debug("Got back a valid 200 response code.")
             return response.json()
-        logging.warning('Received an invalid status code when trying to retreive JAMF Device list:%s - %s', response.status_code, response.content)
+        logging.warning(
+            "Received an invalid status code when trying to retreive JAMF Device list:%s - %s",
+            response.status_code,
+            response.content,
+        )
         logging.debug("Returning a null value for the function.")
         return None
 
@@ -97,13 +123,20 @@ class Jamf:
             requests.Session object to use for this request. This session must have
             all headers needed for the request, including authorization headers.
         """
-        api_url = '{0}/JSSResource/mobiledevices'.format(self.base_url)
-        logging.debug('Calling for JAMF mobiles against: %s\n The username, passwords, and headers for this GET requestcan be found near the beginning of the output.', api_url)
+        api_url = "{0}/JSSResource/mobiledevices".format(self.base_url)
+        logging.debug(
+            "Calling for JAMF mobiles against: %s\n The username, passwords, and headers for this GET requestcan be found near the beginning of the output.",
+            api_url,
+        )
         response = self._session.get(api_url)
         if response.status_code == 200:
             logging.debug("Got back a valid 200 response code.")
             return response.json()
-        logging.warning('Received an invalid status code when trying to retreive JAMF Device list:%s - %s', response.status_code, response.content)
+        logging.warning(
+            "Received an invalid status code when trying to retreive JAMF Device list:%s - %s",
+            response.status_code,
+            response.content,
+        )
         logging.debug("Returning a null value for the function.")
         return None
 
@@ -121,9 +154,13 @@ class Jamf:
         if response.status_code == 200:
             logging.debug("Got back a valid 200 response code.")
             jsonresponse = response.json()
-            logging.debug("Returning: %s", jsonresponse['computer'])
-            return jsonresponse['computer']
-        logging.warning('JAMFPro responded with error code:%s when we tried to look up id: %s', response, jamf_id)
+            logging.debug("Returning: %s", jsonresponse["computer"])
+            return jsonresponse["computer"]
+        logging.warning(
+            "JAMFPro responded with error code:%s when we tried to look up id: %s",
+            response,
+            jamf_id,
+        )
         logging.debug("Returning a null value for the function.")
         return None
 
@@ -142,9 +179,13 @@ class Jamf:
         if response.status_code == 200:
             logging.debug("Got back a valid 200 response code.")
             jsonresponse = response.json()
-            logging.debug("Returning: %s", jsonresponse['mobile_device'])
-            return jsonresponse['mobile_device']
-        logging.warning('JAMFPro responded with error code:%s when we tried to look up id: %s', response, jamf_id)
+            logging.debug("Returning: %s", jsonresponse["mobile_device"])
+            return jsonresponse["mobile_device"]
+        logging.warning(
+            "JAMFPro responded with error code:%s when we tried to look up id: %s",
+            response,
+            jamf_id,
+        )
         logging.debug("Returning a null value for the function.")
         return None
 
@@ -161,16 +202,28 @@ class Jamf:
             all headers needed for the request, including authorization headers.
         """
         api_url = "{}/JSSResource/computers/id/{}".format(self.base_url, jamf_id)
-        payload = """<?xml version="1.0" encoding="UTF-8"?><computer><general><id>{}</id><asset_tag>{}</asset_tag></general></computer>""".format(jamf_id, asset_tag)
-        logging.debug('Making Get request against: %s\nPayload for the PUT request is: %s\nThe username, password, and headers can be found near the beginning of the output.', api_url, payload)
+        payload = """<?xml version="1.0" encoding="UTF-8"?><computer><general><id>{}</id><asset_tag>{}</asset_tag></general></computer>""".format(
+            jamf_id, asset_tag
+        )
+        logging.debug(
+            "Making Get request against: %s\nPayload for the PUT request is: %s\nThe username, password, and headers can be found near the beginning of the output.",
+            api_url,
+            payload,
+        )
         response = self._session.put(api_url, data=payload)
         if response.status_code == 201:
             logging.debug("Got a 201 response. Returning: True")
             return True
         if response.status_code == 200:
-            logging.debug("Got a 200 response code. Returning the response: %s", response)
+            logging.debug(
+                "Got a 200 response code. Returning the response: %s", response
+            )
             return response.json()
-        logging.warning('Got back an error response code:%s - %s', response.status_code, response.content)
+        logging.warning(
+            "Got back an error response code:%s - %s",
+            response.status_code,
+            response.content,
+        )
         return None
 
     def update_mobile_device_asset_tag(self, jamf_id, asset_tag):
@@ -187,17 +240,30 @@ class Jamf:
             all headers needed for the request, including authorization headers.
         """
         api_url = "{}/JSSResource/mobiledevices/id/{}".format(self.base_url, jamf_id)
-        payload = """<?xml version="1.0" encoding="UTF-8"?><mobile_device><general><id>{}</id><asset_tag>{}</asset_tag></general></mobile_device>""".format(jamf_id, asset_tag)
-        logging.debug('Making Get request against: %s\nPayload for the PUT request is: %s\nThe username, password, and headers can be found near the beginning of the output.', api_url, payload)
+        payload = """<?xml version="1.0" encoding="UTF-8"?><mobile_device><general><id>{}</id><asset_tag>{}</asset_tag></general></mobile_device>""".format(
+            jamf_id, asset_tag
+        )
+        logging.debug(
+            "Making Get request against: %s\nPayload for the PUT request is: %s\nThe username, password, and headers can be found near the beginning of the output.",
+            api_url,
+            payload,
+        )
         response = self._session.put(api_url, data=payload)
         if response.status_code == 201:
             logging.debug("Got a 201 response. Returning: True")
             return True
         if response.status_code == 200:
-            logging.debug("Got a 200 response code. Returning the response: %s", response)
+            logging.debug(
+                "Got a 200 response code. Returning the response: %s", response
+            )
             return response.json()
-        logging.warning('Got back an error response code:%s - %s', response.status_code, response.content)
+        logging.warning(
+            "Got back an error response code:%s - %s",
+            response.status_code,
+            response.content,
+        )
         return None
+
 
 class JamfError(Exception):
     """Thrown on general failures when contacting the Jamf API."""

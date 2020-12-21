@@ -31,9 +31,7 @@ class Snipe:
         self.first_call = datetime.min
         self.rate_limited = rate_limited
 
-    def request_handler(
-        self, req, *args, **kwargs
-    ):  # pylint: disable=unused-argument
+    def request_handler(self, req, *args, **kwargs):  # pylint: disable=unused-argument
         """Handles rate limiting for the Snipe-IT server."""
         if self.rate_limited:
             if '"messages":429' in req.text:
@@ -91,9 +89,13 @@ class Snipe:
             raise AuthorizationIncorrect(
                 "Call to /api/v1/users failed, ensure your Snipe-IT API key is correct."
             )
-        logging.error("An unknown error occurred while checking the Snipe-IT connection. Is the URL correct?")
+        logging.error(
+            "An unknown error occurred while checking the Snipe-IT connection. Is the URL correct?"
+        )
         req.raise_for_status()
-        raise SnipeItError("Snipe-IT API returned HTTP {}. {}".format(req.status_code, req.text))
+        raise SnipeItError(
+            "Snipe-IT API returned HTTP {}. {}".format(req.status_code, req.text)
+        )
 
     def search_asset(self, serial):
         """Looks up an asset by its serial number in Snipe-IT.
@@ -168,7 +170,11 @@ class Snipe:
             if total == 1 and server_total != 1:
                 total = server_total
             elif server_total != total:
-                raise SnipeItError("Snipe-IT's total user count changed while we were retrieving {}! Please try again.".format(endpoint))
+                raise SnipeItError(
+                    "Snipe-IT's total user count changed while we were retrieving {}! Please try again.".format(
+                        endpoint
+                    )
+                )
 
         return items
 
@@ -331,7 +337,7 @@ class Snipe:
 
             if jsonresponse["status"] != "success":
                 logging.error(
-                    'Unable to update ID: %s.\nSnipe-IT says: %s\nWe tried to update with payload %s',
+                    "Unable to update ID: %s.\nSnipe-IT says: %s\nWe tried to update with payload %s",
                     snipe_id,
                     jsonresponse["messages"],
                     payload,
@@ -379,7 +385,13 @@ class Snipe:
         return response
 
     def checkout_asset(
-        self, user, asset_id, user_list, do_not_search, checked_out_user=None, default_user=None
+        self,
+        user,
+        asset_id,
+        user_list,
+        do_not_search,
+        checked_out_user=None,
+        default_user=None,
     ):
         """Checks out a single asset in Snipe-IT to the specified user.
 
@@ -460,7 +472,7 @@ class Snipe:
         return self._get_paginated_endpoint("/api/v1/manufacturers")
 
     def get_apple_manufacturer(self):
-        """ Returns the integer ID of the "Apple" manufacturer in snipe-it.
+        """Returns the integer ID of the "Apple" manufacturer in snipe-it.
 
         Raises ValueError if the "Apple" manufacturer is not found.
         """

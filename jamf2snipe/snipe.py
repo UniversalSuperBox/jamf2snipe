@@ -1,7 +1,6 @@
 """Abstractions for Snipe-IT"""
 
 import logging
-from datetime import datetime, timezone
 from time import sleep
 
 import requests
@@ -17,7 +16,7 @@ class Snipe:
     :param api_key: An API key which is valid to use the Snipe-IT API
     """
 
-    def __init__(self, base_url, api_key, rate_limited=True):
+    def __init__(self, base_url, api_key):
         self._session = requests.Session()
         self._session.headers.update(
             {
@@ -26,43 +25,39 @@ class Snipe:
                 "Content-Type": "application/json",
             }
         )
+        self._session.hooks["response"] = self.request_handler
         self.base_url = base_url
         self.api_count = 0
-        self.first_call = datetime.min
-        self.rate_limited = rate_limited
 
     def request_handler(self, req, *args, **kwargs):  # pylint: disable=unused-argument
         """Handles rate limiting for the Snipe-IT server."""
-        if self.rate_limited:
-            if '"messages":429' in req.text:
-                logging.warning(
-                    "Despite respecting the rate limit of Snipe, we've still been limited. Trying again after sleeping for 2 seconds."
-                )
-                sleep(2)
+        self.api_count += 1
+
+        message_sent_already = False
+        while True:
+            try:
+                resp_json = req.json()
+            except ValueError:
+                return req
+
+            error_msg = resp_json.get("messages", "")
+
+            if error_msg == 429 or error_msg == "429":
+                if not message_sent_already:
+                    logging.warning(message_sent_already)
+                    logging.warning(
+                        "We're being rate-limited by Snipe-IT. I'll hold off on requests for a few seconds."
+                    )
+                    message_sent_already = True
+                sleep(3)
                 re_req = req.request
-                return self._session.send(re_req)
-            if self.first_call == datetime.min:
-                self.first_call = datetime.now(tz=timezone.utc)
-            self.api_count += 1
-            time_elapsed = datetime.now(tz=timezone.utc) - self.first_call
-            snipe_api_rate = self.api_count / time_elapsed.total_seconds()
-            if snipe_api_rate > 1.95:
-                sleep_time = 0.5 + (snipe_api_rate - 1.95)
-                logging.debug(
-                    "Going over snipe rate limit of 120/minute (%s/minute), sleeping for %s",
-                    snipe_api_rate,
-                    sleep_time,
-                )
-                sleep(sleep_time)
-            logging.debug(
-                "Made %s requests to Snipe IT in %s seconds, with a request being sent every %s seconds",
-                self.api_count,
-                time_elapsed,
-                snipe_api_rate,
-            )
-        if '"messages":429' in req.text:
-            logging.error(req.content)
-            raise RateLimitError("Rate limit hit during request to Snipe-IT.")
+                # We'll end up recursing this function if we don't set hooks
+                # manually
+                re_req.hooks = {"response": None}
+                req = self._session.send(re_req)
+            else:
+                break
+
         return req
 
     def check_connection(self):

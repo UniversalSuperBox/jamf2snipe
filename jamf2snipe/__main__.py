@@ -93,7 +93,7 @@ runtimeargs.add_argument(
 runtimeargs.add_argument(
     "-r",
     "--ratelimited",
-    help="Puts a half second delay between Snipe IT API calls to adhere to the standard 120/minute rate limit",
+    help="Ignored -- Was previously used to enable rate-limit handling for Snipe-IT, it is now always enabled.",
     action="store_true",
 )
 runtimeargs.add_argument(
@@ -203,7 +203,6 @@ logging.info(
 ### Setup Some Functions ###
 SNIPE_API_COUNT = 0
 FIRST_SNIPE_CALL = None
-RATE_LIMIT_SNIPE = USER_ARGS.ratelimited
 
 
 def main():

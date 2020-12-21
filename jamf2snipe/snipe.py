@@ -31,7 +31,7 @@ class Snipe:
         self.first_call = datetime.min
         self.rate_limited = rate_limited
 
-    def snipe_request_handler(
+    def request_handler(
         self, req, *args, **kwargs
     ):  # pylint: disable=unused-argument
         """Handles rate limiting for the Snipe-IT server."""
@@ -95,7 +95,7 @@ class Snipe:
         req.raise_for_status()
         raise SnipeItError("Snipe-IT API returned HTTP {}. {}".format(req.status_code, req.text))
 
-    def search_snipe_asset(self, serial):
+    def search_asset(self, serial):
         """Looks up an asset by its serial number in Snipe-IT.
 
         Snipe-IT does not enforce uniqueness of the serial number, so it may return
@@ -172,7 +172,7 @@ class Snipe:
 
         return items
 
-    def get_snipe_models(self):
+    def get_models(self):
         """Looks up all of the asset models in Snipe-IT.
 
         Returns a dict object matching https://snipe-it.readme.io/reference#models
@@ -210,14 +210,14 @@ class Snipe:
         )
         raise SnipeItError("Snipe models API endpoint failed.")
 
-    def get_snipe_users(self):
+    def get_users(self):
         """Get a list of all users in Snipe-IT.
 
         :returns: List of dicts representing users
         """
         return self._get_paginated_endpoint("/api/v1/users")
 
-    def get_snipe_user_id(self, username, user_list, do_not_search):
+    def get_user_id(self, username, user_list, do_not_search):
         """Get a Snipe-IT user's unique identifier given their username.
 
         :param username: Username to search Snipe-IT for.
@@ -257,7 +257,7 @@ class Snipe:
         except (KeyError, IndexError):
             return "NotFound"
 
-    def create_snipe_model(self, payload):
+    def create_model(self, payload):
         """Creates a new model in Snipe-IT.
 
         :param payload: JSON to send directly to the models endpoint in Snipe-IT.
@@ -281,7 +281,7 @@ class Snipe:
             )
         )
 
-    def create_snipe_asset(self, payload):
+    def create_asset(self, payload):
         """Creates a new asset in Snipe-IT.
 
         :param payload: JSON to send directly to the models endpoint in Snipe-IT.
@@ -309,7 +309,7 @@ class Snipe:
         )
         return response
 
-    def update_snipe_asset(self, snipe_id, payload):
+    def update_asset(self, snipe_id, payload):
         """Updates an existing asset in Snipe-IT.
 
         :param snipe_id: Unique identifier of the object to update in Snipe-IT.
@@ -358,7 +358,7 @@ class Snipe:
         )
         return False
 
-    def checkin_snipe_asset(self, asset_id):
+    def checkin_asset(self, asset_id):
         """Checks in a single asset in Snipe-IT, removing its assignee.
 
         :param asset_id: Unique identifier of the object to update in Snipe-IT.
@@ -378,7 +378,7 @@ class Snipe:
             return "CheckedOut"
         return response
 
-    def checkout_snipe_asset(
+    def checkout_asset(
         self, user, asset_id, user_list, do_not_search, checked_out_user=None, default_user=None
     ):
         """Checks out a single asset in Snipe-IT to the specified user.
@@ -415,7 +415,7 @@ class Snipe:
         """
         logging.debug("Asset %s is being checked out to %s", user, asset_id)
         if user:
-            user_id = self.get_snipe_user_id(user, user_list, do_not_search)
+            user_id = self.get_user_id(user, user_list, do_not_search)
         else:
             logging.debug("No user specified, not checking out this asset")
             return "NoUserSpecified"
@@ -436,7 +436,7 @@ class Snipe:
             logging.info("%s already checked out to user %s", asset_id, user)
             return "CheckedOut"
         logging.info("Checking in %s to check it out to %s", asset_id, user)
-        self.checkin_snipe_asset(asset_id)
+        self.checkin_asset(asset_id)
         api_url = "{}/api/v1/hardware/{}/checkout".format(self.base_url, asset_id)
         logging.info("Checking out %s to check it out to %s", asset_id, user)
         payload = {
@@ -459,7 +459,7 @@ class Snipe:
         """Returns a list of manufacturers in snipe-it"""
         return self._get_paginated_endpoint("/api/v1/manufacturers")
 
-    def get_snipe_apple_manufacturer(self):
+    def get_apple_manufacturer(self):
         """ Returns the integer ID of the "Apple" manufacturer in snipe-it.
 
         Raises ValueError if the "Apple" manufacturer is not found.

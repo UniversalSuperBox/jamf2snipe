@@ -182,7 +182,7 @@ def main():
     apple_manufacturer_id = config['snipe-it'].get('manufacturer_id', None)
     if apple_manufacturer_id is None:
         try:
-            apple_manufacturer_id = snipe_it.get_snipe_apple_manufacturer()
+            apple_manufacturer_id = snipe_it.get_apple_manufacturer()
         except ValueError:
             logging.critical("Failed to find a manufacturer on your Snipe instance with the name 'Apple' and you did not set one in the configuration file. Make sure the 'Apple' manufacturer exists or set the manufacturer_id in settings.conf.")
             sys.exit(1)
@@ -190,7 +190,7 @@ def main():
 
     # Get a list of known models from Snipe
     logging.info("Getting a list of computer models that snipe knows about.")
-    snipemodels = snipe_it.get_snipe_models()
+    snipemodels = snipe_it.get_models()
     logging.debug("Parsing the %s model results for models with model numbers.", len(snipemodels['rows']))
     model_numbers = {}
     for model in snipemodels['rows']:
@@ -214,7 +214,7 @@ def main():
 
     if USER_ARGS.users or USER_ARGS.users_force or USER_ARGS.users_inverse:
         logging.info("Retrieving list of users from Snipe-IT.")
-        snipe_users = snipe_it.get_snipe_users()
+        snipe_users = snipe_it.get_users()
         logging.info("Got %i users.", len(snipe_users))
 
     total_assets = 0
@@ -269,7 +269,7 @@ def main():
                     if 'computer_custom_fieldset_id' in config['snipe-it']:
                         fieldset_split = config['snipe-it']['computer_custom_fieldset_id']
                         newmodel['fieldset_id'] = fieldset_split
-                    snipe_model_id = snipe_it.create_snipe_model(newmodel)
+                    snipe_model_id = snipe_it.create_model(newmodel)
                     model_numbers[jamf_model_identifier] = snipe_model_id
             elif jamf_type == 'mobile_devices':
                 jamf_model_identifier = jamf_return['general']['model_identifier']
@@ -279,11 +279,11 @@ def main():
                     if 'mobile_custom_fieldset_id' in config['snipe-it']:
                         fieldset_split = config['snipe-it']['mobile_custom_fieldset_id']
                         newmodel['fieldset_id'] = fieldset_split
-                    snipe_model_id = snipe_it.create_snipe_model(newmodel)
+                    snipe_model_id = snipe_it.create_model(newmodel)
                     model_numbers[jamf_model_identifier] = snipe_model_id
 
             # Pass the SN from JAMF to search for a match in Snipe
-            snipe_asset = snipe_it.search_snipe_asset(jamf_return['general']['serial_number'])
+            snipe_asset = snipe_it.search_asset(jamf_return['general']['serial_number'])
 
             # Create a new asset if there's no match:
             if snipe_asset == 'NoMatch':
@@ -317,7 +317,7 @@ def main():
                 if jamf_return['general']['serial_number'] == 'Not Available':
                     logging.warning("The serial number is not available in JAMF. This is normal for DEP enrolled devices that have not yet checked in for the first time. Since there's no serial number yet, we'll skip it for now.")
                     continue
-                new_snipe_asset = snipe_it.create_snipe_asset(newasset)
+                new_snipe_asset = snipe_it.create_asset(newasset)
                 if new_snipe_asset[0] != "AssetCreated":
                     continue
                 if USER_ARGS.users or USER_ARGS.users_force or USER_ARGS.users_inverse:
@@ -326,7 +326,7 @@ def main():
                         logging.info("Couldn't find %s for this device in %s, not checking it out.", jamf_data_field, jamf_data_category)
                         continue
                     logging.info('Checking out new item %s to user %s', jamf_return['general']['name'], jamf_return[str(jamf_data_category)][str(jamf_data_field)])
-                    snipe_it.checkout_snipe_asset(jamf_return[jamf_data_category][jamf_data_field], new_snipe_asset[1].json()['payload']['id'], snipe_users, USER_ARGS.users_no_search, "NewAsset", default_user=config["snipe-it"].get("default_user", None))
+                    snipe_it.checkout_asset(jamf_return[jamf_data_category][jamf_data_field], new_snipe_asset[1].json()['payload']['id'], snipe_users, USER_ARGS.users_no_search, "NewAsset", default_user=config["snipe-it"].get("default_user", None))
 
             # Log an error if there's an issue, or more than once match.
             elif snipe_asset == 'MultiMatch':
@@ -370,7 +370,7 @@ def main():
                         # If it's a custom value it'll fail the first section and send it to except section that will parse custom sections.
                         try:
                             if snipe_asset['rows'][0][snipekey] != latestvalue:
-                                snipe_it.update_snipe_asset(snipe_id, payload)
+                                snipe_it.update_asset(snipe_id, payload)
                             else:
                                 logging.debug("Skipping the payload, because it already exits.")
                         except (KeyError, IndexError):
@@ -382,7 +382,7 @@ def main():
                                         logging.debug("Found the field, and the value needs to be updated from %s to %s", snipe_asset['rows'][0]['custom_fields'][custom_field]['value'], latestvalue)
                                         needsupdate = True
                             if needsupdate:
-                                snipe_it.update_snipe_asset(snipe_id, payload)
+                                snipe_it.update_asset(snipe_id, payload)
                             else:
                                 logging.debug("Skipping the payload, because it already exists, or the Snipe key we're mapping to doesn't.")
                     if ((USER_ARGS.users or USER_ARGS.users_inverse) and (snipe_asset['rows'][0]['assigned_to'] is None) == USER_ARGS.users) or USER_ARGS.users_force:
@@ -392,7 +392,7 @@ def main():
                             if jamf_data_field not in jamf_return[jamf_data_category]:
                                 logging.info("Couldn't find %s for this device in %s, not checking it out.", jamf_data_field, jamf_data_category)
                                 continue
-                            snipe_it.checkout_snipe_asset(jamf_return[jamf_data_category][jamf_data_field], snipe_id, snipe_users, USER_ARGS.users_no_search, snipe_asset['rows'][0]['assigned_to'], default_user=config["snipe-it"].get("default_user", None))
+                            snipe_it.checkout_asset(jamf_return[jamf_data_category][jamf_data_field], snipe_id, snipe_users, USER_ARGS.users_no_search, snipe_asset['rows'][0]['assigned_to'], default_user=config["snipe-it"].get("default_user", None))
                         else:
                             logging.info("Can't checkout %s since the status isn't set to deployable", jamf_return['general']['name'])
 

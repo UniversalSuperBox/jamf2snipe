@@ -538,8 +538,8 @@ def main():
 
             else:
                 # Only update if JAMF has more recent info.
-                snipe_id = snipe_asset["rows"][0]["id"]
-                snipe_time = snipe_asset["rows"][0]["updated_at"]["datetime"]
+                snipe_id = snipe_asset["id"]
+                snipe_time = snipe_asset["updated_at"]["datetime"]
                 if jamf_type == "computers":
                     jamf_time = jamf_return["general"]["report_date"]
                 elif jamf_type == "mobile_devices":
@@ -579,7 +579,7 @@ def main():
                         # Need to check that we're not needlessly updating the asset.
                         # If it's a custom value it'll fail the first section and send it to except section that will parse custom sections.
                         try:
-                            if snipe_asset["rows"][0][snipekey] != latestvalue:
+                            if snipe_asset[snipekey] != latestvalue:
                                 snipe_it.update_asset(snipe_id, payload)
                             else:
                                 logging.debug(
@@ -590,22 +590,22 @@ def main():
                                 "The snipekey lookup failed, which means it's a custom field. Parsing those to see if it needs to be updated or not."
                             )
                             needsupdate = False
-                            for custom_field in snipe_asset["rows"][0]["custom_fields"]:
+                            for custom_field in snipe_asset["custom_fields"]:
                                 if (
-                                    snipe_asset["rows"][0]["custom_fields"][
+                                    snipe_asset["custom_fields"][
                                         custom_field
                                     ]["field"]
                                     == snipekey
                                 ):
                                     if (
-                                        snipe_asset["rows"][0]["custom_fields"][
+                                        snipe_asset["custom_fields"][
                                             custom_field
                                         ]["value"]
                                         != latestvalue
                                     ):
                                         logging.debug(
                                             "Found the field, and the value needs to be updated from %s to %s",
-                                            snipe_asset["rows"][0]["custom_fields"][
+                                            snipe_asset["custom_fields"][
                                                 custom_field
                                             ]["value"],
                                             latestvalue,
@@ -619,11 +619,11 @@ def main():
                                 )
                     if (
                         (USER_ARGS.users or USER_ARGS.users_inverse)
-                        and (snipe_asset["rows"][0]["assigned_to"] is None)
+                        and (snipe_asset["assigned_to"] is None)
                         == USER_ARGS.users
                     ) or USER_ARGS.users_force:
 
-                        if snipe_asset["rows"][0]["status_label"]["status_meta"] in (
+                        if snipe_asset["status_label"]["status_meta"] in (
                             "deployable",
                             "deployed",
                         ):
@@ -642,7 +642,7 @@ def main():
                                 snipe_id,
                                 snipe_users,
                                 USER_ARGS.users_no_search,
-                                snipe_asset["rows"][0]["assigned_to"],
+                                snipe_asset["assigned_to"],
                                 default_user=config["snipe-it"].get(
                                     "default_user", None
                                 ),
@@ -665,7 +665,7 @@ def main():
 
                 # Update/Sync the Snipe Asset Tag Number back to JAMF
                 # The user arg below is set to false if it's called, so this would fail if the user called it.
-                snipe_asset_tag = snipe_asset["rows"][0]["asset_tag"]
+                snipe_asset_tag = snipe_asset["asset_tag"]
                 jamf_asset_id = jamf_return["general"]["id"]
                 if (
                     jamf_return["general"]["asset_tag"] != snipe_asset_tag

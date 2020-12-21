@@ -104,8 +104,8 @@ class Snipe:
         return more than one asset for the search.
 
         :returns:
-            If a single match is found, a dict object representing the match
-            is returned.
+            If a single match is found, a dict of the matched Asset object is
+            returned.
 
             If no match is found, the string ``"NoMatch"`` is returned.
 
@@ -123,7 +123,7 @@ class Snipe:
             jsonresponse = response.json()
             # Check to make sure there's actually a result
             if jsonresponse["total"] == 1:
-                return jsonresponse
+                return jsonresponse["rows"][0]
             if jsonresponse["total"] == 0:
                 logging.info("No assets match %s", serial)
                 return "NoMatch"

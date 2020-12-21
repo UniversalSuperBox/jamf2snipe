@@ -202,8 +202,8 @@ def main():
     logging.debug("Here's the list of the %s models and their id's that we were able to collect:\n%s", len(model_numbers), model_numbers)
 
     # Get the IDS of all active assets.
-    jamf_computer_list = jamf_api.get_jamf_computers()
-    jamf_mobile_list = jamf_api.get_jamf_mobiles()
+    jamf_computer_list = jamf_api.get_computers()
+    jamf_mobile_list = jamf_api.get_mobile_devices()
     jamf_types = {
         'computers': jamf_computer_list,
         'mobile_devices': jamf_mobile_list
@@ -253,9 +253,9 @@ def main():
             logging.info("Processing entry %s out of %s - JAMFID: %s - NAME: %s", current_asset, total_assets, jamf_asset['id'], jamf_asset['name'])
             # Search through the list by ID for all asset information\
             if jamf_type == 'computers':
-                jamf_return = jamf_api.search_jamf_asset(jamf_asset['id'])
+                jamf_return = jamf_api.get_computer(jamf_asset['id'])
             elif jamf_type == 'mobile_devices':
-                jamf_return = jamf_api.search_jamf_mobile(jamf_asset['id'])
+                jamf_return = jamf_api.get_mobile_device(jamf_asset['id'])
             if jamf_return is None:
                 logging.warning("JAMF did not return a device for ID %s for type %s", jamf_asset['id'], jamf_type)
                 continue
@@ -408,10 +408,10 @@ def main():
                     logging.info("JAMF doesn't have the same asset tag as SNIPE so we'll update it because it should be authoritative.")
                     if snipe_asset_tag:
                         if jamf_type == 'computers':
-                            jamf_api.update_jamf_asset_tag(jamf_asset_id, snipe_asset_tag)
+                            jamf_api.update_computer_asset_tag(jamf_asset_id, snipe_asset_tag)
                             logging.info("Device is a computer, updating computer record")
                         elif jamf_type == 'mobile_devices':
-                            jamf_api.update_jamf_mobiledevice_asset_tag(jamf_asset_id, snipe_asset_tag)
+                            jamf_api.update_mobile_device_asset_tag(jamf_asset_id, snipe_asset_tag)
                             logging.info("Device is a mobile device, updating the mobile device record")
 
     logging.debug('Total amount of API calls made to snipe-it: %i', snipe_it.api_count)

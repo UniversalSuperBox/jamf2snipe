@@ -22,7 +22,7 @@ class Jamf:
 
     def __init__(self, base_url, username, password):
         self._session = requests.Session()
-        self._session.hooks["response"].append(self.jamf_request_handler)
+        self._session.hooks["response"].append(self.request_handler)
         self._session.headers.update({'Accept': 'application/json'})
         self._username = username
         self._password = password
@@ -57,7 +57,7 @@ class Jamf:
         logging.error("An unknown error occurred while checking the Jamf connection and Requests did not raise an exception for it.")
         raise JamfError()
 
-    def jamf_request_handler(self, r, *args, **kwargs): #pylint: disable=unused-argument,invalid-name
+    def request_handler(self, r, *args, **kwargs): #pylint: disable=unused-argument,invalid-name
         """Handles rate limiting and accounting for the JAMF server."""
         if self.first_call is None:
             self.first_call = datetime.now(tz=timezone.utc)
@@ -71,7 +71,7 @@ class Jamf:
             return newresponse
         return r
 
-    def get_jamf_computers(self):
+    def get_computers(self):
         """Retrieves a list of all computers from the JAMF instance.
 
         :param session:
@@ -88,7 +88,7 @@ class Jamf:
         logging.debug("Returning a null value for the function.")
         return None
 
-    def get_jamf_mobiles(self):
+    def get_mobile_devices(self):
         """Retrieves a list of all mobile devices from the JAMF instance.
 
         The JAMF instance is specified by the global variable ``self.base_url``
@@ -107,7 +107,7 @@ class Jamf:
         logging.debug("Returning a null value for the function.")
         return None
 
-    def search_jamf_asset(self, jamf_id):
+    def get_computer(self, jamf_id):
         """Retrieves a single computer from the JAMF instance by ID.
 
         :param jamf_id: JAMF instance's unique ID value identifying this computer.
@@ -127,7 +127,7 @@ class Jamf:
         logging.debug("Returning a null value for the function.")
         return None
 
-    def search_jamf_mobile(self, jamf_id):
+    def get_mobile_device(self, jamf_id):
         """Retrieves a single mobile device from the JAMF instance by ID.
 
         :param jamf_id: JAMF instance's unique ID value identifying this mobile
@@ -148,7 +148,7 @@ class Jamf:
         logging.debug("Returning a null value for the function.")
         return None
 
-    def update_jamf_asset_tag(self, jamf_id, asset_tag):
+    def update_computer_asset_tag(self, jamf_id, asset_tag):
         """Updates the asset tag field on a single computer in JAMF.
 
         :param jamf_id: JAMF instance's unique ID value identifying this computer.
@@ -173,7 +173,7 @@ class Jamf:
         logging.warning('Got back an error response code:%s - %s', response.status_code, response.content)
         return None
 
-    def update_jamf_mobiledevice_asset_tag(self, jamf_id, asset_tag):
+    def update_mobile_device_asset_tag(self, jamf_id, asset_tag):
         """Updates the asset tag field on a single mobile device in JAMF.
 
         :param jamf_id: JAMF instance's unique ID value identifying this mobile

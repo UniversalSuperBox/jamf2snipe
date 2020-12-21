@@ -11,7 +11,7 @@ ABOUT:
         https://snipeitapp.com
 
 LICENSE:
-    GLPv3
+    MIT
 
 CONFIGURATION:
     These settings are commonly found in the settings.conf file.

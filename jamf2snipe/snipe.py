@@ -28,6 +28,8 @@ class Snipe:
         self._session.hooks["response"] = self.request_handler
         self.base_url = base_url
         self.api_count = 0
+        self._user_cache_impl = {}
+        self._asset_serial_cache_impl = {}
 
     def request_handler(self, req, *args, **kwargs):  # pylint: disable=unused-argument
         """Handles rate limiting for the Snipe-IT server."""
@@ -67,6 +69,9 @@ class Snipe:
         fails. If no exception was raised, it is probably safe to continue
         using this Snipe object instance.
 
+        If the connection is successful, pre-populates the asset and user
+        caches.
+
         This may raise any of the exceptions found in `requests.exceptions`_.
 
         :raises AuthorizationIncorrect:
@@ -79,6 +84,10 @@ class Snipe:
 
         req = self._session.get(self.base_url + "/api/v1/users", params={"limit": 1})
         if req.status_code == 200:
+            # Pre-populate our caches
+            self._user_cache  # pylint: disable=pointless-statement
+            self._asset_serial_cache  # pylint: disable=pointless-statement
+
             return True
         if req.status_code == 401:
             raise AuthorizationIncorrect(
@@ -92,7 +101,7 @@ class Snipe:
             "Snipe-IT API returned HTTP {}. {}".format(req.status_code, req.text)
         )
 
-    def search_asset(self, serial):
+    def get_asset_by_serial(self, serial):
         """Looks up an asset by its serial number in Snipe-IT.
 
         Snipe-IT does not enforce uniqueness of the serial number, so it may
@@ -112,6 +121,10 @@ class Snipe:
 
         :param serial: Serial number to look up in Snipe-IT.
         """
+        asset = self._asset_serial_cache.get(serial, None)
+        if asset is not None:
+            return asset
+
         api_url = "{}/api/v1/hardware/byserial/{}".format(self.base_url, serial)
         response = self._session.get(api_url)
         if response.status_code == 200:
@@ -188,45 +201,122 @@ class Snipe:
         """
         return self._get_paginated_endpoint("/api/v1/users")
 
-    def get_user_id(self, username, user_list, do_not_search):
-        """Get a Snipe-IT user's unique identifier given their username.
+    @property
+    def _user_cache(self):
+        """Holds a cache of users by their username from Snipe-IT.
+
+        Snipe-IT's API rate limiting is just 120 requests/minute. A lot of our
+        operations on the API are simply looking up users, so if we can cache
+        a list of users we'll greatly reduce our load on the API.
+
+        This property detects whether a cache is currently held and creates
+        the cache if not.
+
+        The cache is a dictionary of {"<username>": {User}} values.
+        """
+
+        if not self._user_cache_impl:
+            logging.debug("Creating Snipe-IT user cache.")
+            self._user_cache_impl = {}
+            cache = self.get_users()
+            for user in cache:
+                username = user["username"]
+                self._user_cache_impl[username] = user
+            logging.debug("Finished creating snipe-IT user cache.")
+
+        return self._user_cache_impl
+
+    @property
+    def _asset_serial_cache(self):
+        """Holds a cache of assets by their serial number from Snipe-IT.
+
+        See the discussion in _user_cache for why this is needed.
+
+        The cache is a dictionary of {"<serial number>": {Asset}} values.
+        """
+
+        if not self._asset_serial_cache_impl:
+            logging.debug("Creating Snipe-IT asset cache.")
+            self._asset_serial_cache_impl = {}
+            cache = self._get_paginated_endpoint("/api/v1/hardware")
+            for asset in cache:
+                serial_number = asset["serial"]
+                if self._asset_serial_cache_impl.get(serial_number, None) is not None:
+                    raise MultipleAssetsForSerial(
+                        "Multiple assets with the serial number {} were found.".format(
+                            serial_number
+                        )
+                    )
+                self._asset_serial_cache_impl[serial_number] = asset
+            logging.debug("Finished creating Snipe-IT asset cache.")
+        return self._asset_serial_cache_impl
+
+    def _invalidate_asset_serial_cache_entry(self, serial_number):
+        """Marks an asset in the asset serial cache as invalid.
+
+        This prevents future attempts to use the asset from using the old
+        cached version.
+
+        Should be called whenever an asset is updated, checked in, checked
+        out...
+
+        :param serial_number: Serial number of the asset to invalidate
+        """
+
+        if self._asset_serial_cache_impl:
+            logging.debug("Invalidating cache for %s", serial_number)
+            try:
+                del self._asset_serial_cache_impl[serial_number]
+            except KeyError:
+                # This item wasn't in the cache anyway, no worries.
+                pass
+
+    def get_user(self, username, fuzzy_search=False):
+        """Get the dict object for a User given their username.
 
         :param username: Username to search Snipe-IT for.
 
-        :param user_list: A list of users returned by get_snipe_users.
+        :param fuzzy_search:
+            If false, the algorithm will only attempt to find users by an
+            exact match on username. If true, will try to use Snipe-IT's fuzzy
+            search with the username after an exact match fails.
 
-        :param do_not_search:
-            Do not try to use the Snipe-IT user search to find the requested
-            username if we were completely unable to find them in user_dict.
-
-        :returns: ``"id"`` value of the user object from Snipe-IT.
+        :returns: dict object of a User from Snipe-IT.
         """
-        if username == "":
-            return "NotFound"
-        username = username.lower()
-        for user in user_list:
-            for value in user.values():
-                if str(value).lower() == username:
-                    user_id = user["id"]
-                    return user_id
-        if do_not_search:
-            logging.debug(
-                "No matches in user_list for %s, not querying the API for the next closest match since we've been told not to",
-                username,
-            )
-            return "NotFound"
-        logging.debug(
-            "No matches in user_list for %s, querying the API for the next closest match",
-            username,
-        )
-        user_id_url = "{}/api/v1/users".format(self.base_url)
-        payload = {"search": username, "limit": 1, "sort": "username", "order": "asc"}
+        cached_user = self._user_cache.get(username, None)
+        if cached_user is not None:
+            return cached_user
+
+        user_url = "{}/api/v1/users".format(self.base_url)
+        payload = {"username": username, "limit": 1, "sort": "username", "order": "asc"}
         logging.debug("The payload for the snipe user search is: %s", payload)
-        response = self._session.get(user_id_url, json=payload)
+        response = self._session.get(user_url, json=payload)
         try:
-            return response.json()["rows"][0]["id"]
-        except (KeyError, IndexError):
-            return "NotFound"
+            return response.json()["rows"][0]
+        except (KeyError, IndexError) as exact_search_error:
+            if fuzzy_search:
+                logging.debug(
+                    "Didn't find a user for that search, re-attempting with fuzzy: %s",
+                    payload,
+                )
+                payload = {
+                    "search": username,
+                    "limit": 1,
+                    "sort": "username",
+                    "order": "asc",
+                }
+                response = self._session.get(user_url, json=payload)
+                try:
+                    return response.json()["rows"][0]
+                except (KeyError, IndexError) as fuzzy_search_error:
+                    raise UserNotFound(
+                        "Unable to find user {} with username or fuzzy search.".format(
+                            username
+                        )
+                    ) from fuzzy_search_error
+            raise UserNotFound(
+                "Unable to find user {} by username.".format(username)
+            ) from exact_search_error
 
     def create_model(self, payload):
         """Creates a new model in Snipe-IT.
@@ -301,6 +391,9 @@ class Snipe:
             )
             jsonresponse = response.json()
 
+            serial_number = jsonresponse["payload"]["serial"]
+            self._invalidate_asset_serial_cache_entry(serial_number)
+
             if jsonresponse["status"] != "success":
                 logging.error(
                     "Unable to update ID: %s.\nSnipe-IT says: %s\nWe tried to update with payload %s",
@@ -330,17 +423,18 @@ class Snipe:
         )
         return False
 
-    def checkin_asset(self, asset_id):
+    def checkin_asset(self, asset_serial_number):
         """Checks in a single asset in Snipe-IT, removing its assignee.
 
-        :param asset_id:
-            Unique identifier of the object to update in Snipe-IT.
+        :param asset_serial_number:
+            Serial number of the asset to check in.
 
         :returns:
             The string ``"CheckedOut"`` if the checkin was successful, the
             ``requests.Response`` object returned by the request if the
             checkin was not successful.
         """
+        asset_id = self.get_asset_by_serial(asset_serial_number)["id"]
         api_url = "{}/api/v1/hardware/{}/checkin".format(self.base_url, asset_id)
         payload = {"note": "checked in by script from Jamf"}
         logging.debug("The payload for the snipe checkin is: %s", payload)
@@ -348,90 +442,76 @@ class Snipe:
         logging.debug("The response from Snipe IT is: %s", response.json())
         if response.status_code == 200:
             logging.debug("Got back status code: 200 - %s", response.content)
+            self._invalidate_asset_serial_cache_entry(asset_serial_number)
             return "CheckedOut"
         return response
 
     def checkout_asset(
         self,
-        user,
-        asset_id,
-        user_list,
-        do_not_search,
-        checked_out_user=None,
-        default_user=None,
+        user_id,
+        asset_serial_number,
     ):
         """Checks out a single asset in Snipe-IT to the specified user.
 
         It is the caller's responsibility to provide the currently checked-out
         user as the ``checked_out_user`` argument.
 
-        :param user: Username of the user to check this asset out to.
+        :param user_id: ID of the Snipe-IT user to check this asset out to.
 
-        :param asset_id:
-            Unique identifier of the object to update in Snipe-IT.
-
-        :param user_list: A list of users returned by get_snipe_users.
-
-        :param do_not_search:
-            Do not try to use the Snipe-IT user search to find the requested
-            username if we were completely unable to find them in user_dict.
-
-        :param checked_out_user:
-            Unique identifier (``"id"``) of the user which this asset is
-            checked out to at call time, or ``"NewAsset"`` if this asset was
-            just created.
-
-        :param default_user:
-            Unique identifier (``"id"``) of user to check this asset out to if
-            the user specified by the ``user`` argument is not found.
+        :param asset_serial_number:
+            Serial number of the asset to check out.
 
         :returns:
-            ``"NotFound"`` if the user with the given username does not exist.
-
             ``"CheckedOut"`` if the asset was checked out successfully.
 
             The ``requests.Response`` object returned by the checkout request
             if it was not successful.
         """
-        logging.debug("Asset %s is being checked out to %s", user, asset_id)
-        if user:
-            user_id = self.get_user_id(user, user_list, do_not_search)
+        logging.debug(
+            "Asset %s is being checked out to %s", user_id, asset_serial_number
+        )
+        if not user_id:
+            raise ValueError("User not specified in call to checkout_asset")
+
+        asset = self.get_asset_by_serial(asset_serial_number)
+        current_user = asset["assigned_to"]
+        if current_user:
+            current_user_id = current_user["id"]
         else:
-            logging.debug("No user specified, not checking out this asset")
-            return "NoUserSpecified"
-        if user_id == "NotFound":
-            logging.info("User %s not found", user)
-            if default_user is None:
-                logging.debug("No default user specified, returning error value")
-                return "NotFound"
-            logging.debug("We have a default user ID, using that.")
-            user_id = default_user
-        if checked_out_user is None:
-            logging.info("Not checked out, attempting to check out to %s", user)
-        elif checked_out_user == "NewAsset":
-            logging.info(
-                "First time this asset will be checked out, checking out to %s", user
-            )
-        elif checked_out_user["id"] == user_id:
-            logging.info("%s already checked out to user %s", asset_id, user)
+            current_user_id = None
+
+        if current_user_id == user_id:
+            logging.debug("Asset is already checked out to desired user.")
             return "CheckedOut"
-        logging.info("Checking in %s to check it out to %s", asset_id, user)
-        self.checkin_asset(asset_id)
-        api_url = "{}/api/v1/hardware/{}/checkout".format(self.base_url, asset_id)
-        logging.info("Checking out %s to check it out to %s", asset_id, user)
+
+        logging.info(
+            "Checking in %s from %s to check it out to %s",
+            asset_serial_number,
+            current_user_id,
+            user_id,
+        )
+        self.checkin_asset(asset_serial_number)
+
+        api_url = "{}/api/v1/hardware/{}/checkout".format(
+            self.base_url, asset_serial_number
+        )
+        logging.info("Checking out %s to %s", asset_serial_number, user_id)
         payload = {
             "checkout_to_type": "user",
             "assigned_user": user_id,
             "note": "Assignment made automatically, via script from Jamf.",
         }
-        logging.debug("The payload for the snipe checkin is: %s", payload)
+        logging.debug("The payload for the snipe checkout is: %s", payload)
         response = self._session.post(api_url, json=payload)
-        logging.debug("The response from Snipe IT is: %s", response.json())
+        logging.debug("The response from Snipe IT is: %s", response.text)
         if response.status_code == 200:
-            logging.debug("Got back status code: 200 - %s", response.content)
+            logging.debug("Got back status code: 200 - %s", response.text)
+            self._invalidate_asset_serial_cache_entry(asset_serial_number)
             return "CheckedOut"
         logging.error(
-            "Asset checkout failed for asset %s with error %s", asset_id, response.text
+            "Asset checkout failed for asset %s with error %s",
+            asset_serial_number,
+            response.text,
         )
         return response
 
@@ -471,3 +551,15 @@ class RateLimitError(Exception):
 
 class AssetCreationError(SnipeItError):
     """Thrown when creating a Snipe-IT asset fails"""
+
+
+class UserNotFound(SnipeItError):
+    """The requested user was not found."""
+
+
+class AssetNotFound(SnipeItError):
+    """The requested asset was not found."""
+
+
+class MultipleAssetsForSerial(SnipeItError):
+    """More than one asset was found for a given serial number."""

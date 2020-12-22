@@ -141,6 +141,7 @@ type_opts.add_argument(
     action="store_true",
 )
 USER_ARGS = runtimeargs.parse_args()
+ALLOW_FUZZY_SEARCH = not USER_ARGS.users_no_search
 
 # Notify users they're going to get a wall of text in verbose mode.
 if USER_ARGS.verbose:
@@ -311,14 +312,6 @@ def main():
     jamf_mobile_list = jamf_api.get_mobile_devices()
     jamf_types = {"computers": jamf_computer_list, "mobile_devices": jamf_mobile_list}
 
-    # Get a list of users from Snipe if the user has specified
-    # they're syncing users
-
-    if USER_ARGS.users or USER_ARGS.users_force or USER_ARGS.users_inverse:
-        logging.info("Retrieving list of users from Snipe-IT.")
-        snipe_users = snipe_it.get_users()
-        logging.info("Got %i users.", len(snipe_users))
-
     total_assets = 0
     if USER_ARGS.computers:
         total_assets = len(jamf_types["computers"]["computers"])
@@ -417,7 +410,9 @@ def main():
                     model_numbers[jamf_model_identifier] = snipe_model_id
 
             # Pass the SN from JAMF to search for a match in Snipe
-            snipe_asset = snipe_it.search_asset(jamf_return["general"]["serial_number"])
+            snipe_asset = snipe_it.get_asset_by_serial(
+                jamf_return["general"]["serial_number"]
+            )
 
             # Create a new asset if there's no match:
             if snipe_asset == "NoMatch":
@@ -514,13 +509,12 @@ def main():
                         jamf_return["general"]["name"],
                         jamf_return[str(jamf_data_category)][str(jamf_data_field)],
                     )
+                    jamf_username = jamf_return[jamf_data_category][jamf_data_field]
+                    target_snipe_user = snipe_it.get_user(
+                        jamf_username, fuzzy_search=ALLOW_FUZZY_SEARCH
+                    )
                     snipe_it.checkout_asset(
-                        jamf_return[jamf_data_category][jamf_data_field],
-                        new_snipe_asset["id"],
-                        snipe_users,
-                        USER_ARGS.users_no_search,
-                        "NewAsset",
-                        default_user=config["snipe-it"].get("default_user", None),
+                        target_snipe_user["id"], new_snipe_asset["serial"]
                     )
 
             # Log an error if there's an issue, or more than once match.
@@ -539,6 +533,7 @@ def main():
                 # Only update if JAMF has more recent info.
                 snipe_id = snipe_asset["id"]
                 snipe_time = snipe_asset["updated_at"]["datetime"]
+                snipe_serial = snipe_asset["serial"]
                 if jamf_type == "computers":
                     jamf_time = jamf_return["general"]["report_date"]
                 elif jamf_type == "mobile_devices":
@@ -591,22 +586,20 @@ def main():
                             needsupdate = False
                             for custom_field in snipe_asset["custom_fields"]:
                                 if (
-                                    snipe_asset["custom_fields"][
-                                        custom_field
-                                    ]["field"]
+                                    snipe_asset["custom_fields"][custom_field]["field"]
                                     == snipekey
                                 ):
                                     if (
-                                        snipe_asset["custom_fields"][
-                                            custom_field
-                                        ]["value"]
+                                        snipe_asset["custom_fields"][custom_field][
+                                            "value"
+                                        ]
                                         != latestvalue
                                     ):
                                         logging.debug(
                                             "Found the field, and the value needs to be updated from %s to %s",
-                                            snipe_asset["custom_fields"][
-                                                custom_field
-                                            ]["value"],
+                                            snipe_asset["custom_fields"][custom_field][
+                                                "value"
+                                            ],
                                             latestvalue,
                                         )
                                         needsupdate = True
@@ -618,8 +611,7 @@ def main():
                                 )
                     if (
                         (USER_ARGS.users or USER_ARGS.users_inverse)
-                        and (snipe_asset["assigned_to"] is None)
-                        == USER_ARGS.users
+                        and (snipe_asset["assigned_to"] is None) == USER_ARGS.users
                     ) or USER_ARGS.users_force:
 
                         if snipe_asset["status_label"]["status_meta"] in (
@@ -636,15 +628,14 @@ def main():
                                     jamf_data_category,
                                 )
                                 continue
+                            jamf_username = jamf_return[jamf_data_category][
+                                jamf_data_field
+                            ]
+                            target_snipe_user = snipe_it.get_user(
+                                jamf_username, fuzzy_search=ALLOW_FUZZY_SEARCH
+                            )
                             snipe_it.checkout_asset(
-                                jamf_return[jamf_data_category][jamf_data_field],
-                                snipe_id,
-                                snipe_users,
-                                USER_ARGS.users_no_search,
-                                snipe_asset["assigned_to"],
-                                default_user=config["snipe-it"].get(
-                                    "default_user", None
-                                ),
+                                target_snipe_user["id"], snipe_serial
                             )
                         else:
                             logging.info(
@@ -688,8 +679,8 @@ def main():
                                 "Device is a mobile device, updating the mobile device record"
                             )
 
-    logging.debug("Total amount of API calls made to snipe-it: %i", snipe_it.api_count)
-    logging.debug("Total amount of API calls made to jamf: %i", jamf_api.api_count)
+    logging.info("Total amount of API calls made to snipe-it: %i", snipe_it.api_count)
+    logging.info("Total amount of API calls made to jamf: %i", jamf_api.api_count)
 
 
 if __name__ == "__main__":

@@ -45,6 +45,7 @@ Lastly, if the asset_tag field is blank in JAMF when it is being created in Snip
 ## Requirements:
 
 - Python3 is installed on your system with the requests, json, time, and configparser python libs installed.
+- Snipe-IT v4.9.4 or higher.
 - Network access to both your JAMF and Snipe-IT environments.
 - A JAMF username and password that has read & write permissions for computer assets.
   - Computers: Read, Update

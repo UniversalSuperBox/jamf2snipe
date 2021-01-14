@@ -439,11 +439,18 @@ class Snipe:
         payload = {"note": "checked in by script from Jamf"}
         logging.debug("The payload for the snipe checkin is: %s", payload)
         response = self._session.post(api_url, json=payload)
-        logging.debug("The response from Snipe IT is: %s", response.json())
+        self._invalidate_asset_serial_cache_entry(asset_serial_number)
+        logging.debug("The response from Snipe IT is: %s", response.text)
         if response.status_code == 200:
-            logging.debug("Got back status code: 200 - %s", response.content)
-            self._invalidate_asset_serial_cache_entry(asset_serial_number)
-            return "CheckedOut"
+            response_json = response.json()
+            logging.debug("Got back status code: 200 - %s", response.text)
+            if response_json["status"] == "success":
+                return "CheckedOut"
+        logging.error(
+            "Asset checkin failed for asset %s with error %s",
+            asset_serial_number,
+            response.text,
+        )
         return response
 
     def checkout_asset(
@@ -452,9 +459,6 @@ class Snipe:
         asset_serial_number,
     ):
         """Checks out a single asset in Snipe-IT to the specified user.
-
-        It is the caller's responsibility to provide the currently checked-out
-        user as the ``checked_out_user`` argument.
 
         :param user_id: ID of the Snipe-IT user to check this asset out to.
 
@@ -474,6 +478,7 @@ class Snipe:
             raise ValueError("User not specified in call to checkout_asset")
 
         asset = self.get_asset_by_serial(asset_serial_number)
+        asset_id = asset["id"]
         current_user = asset["assigned_to"]
         if current_user:
             current_user_id = current_user["id"]
@@ -492,9 +497,7 @@ class Snipe:
         )
         self.checkin_asset(asset_serial_number)
 
-        api_url = "{}/api/v1/hardware/{}/checkout".format(
-            self.base_url, asset_serial_number
-        )
+        api_url = "{}/api/v1/hardware/{}/checkout".format(self.base_url, asset_id)
         logging.info("Checking out %s to %s", asset_serial_number, user_id)
         payload = {
             "checkout_to_type": "user",
@@ -503,11 +506,13 @@ class Snipe:
         }
         logging.debug("The payload for the snipe checkout is: %s", payload)
         response = self._session.post(api_url, json=payload)
+        self._invalidate_asset_serial_cache_entry(asset_serial_number)
         logging.debug("The response from Snipe IT is: %s", response.text)
         if response.status_code == 200:
+            response_json = response.json()
             logging.debug("Got back status code: 200 - %s", response.text)
-            self._invalidate_asset_serial_cache_entry(asset_serial_number)
-            return "CheckedOut"
+            if response_json["status"] == "success":
+                return "CheckedOut"
         logging.error(
             "Asset checkout failed for asset %s with error %s",
             asset_serial_number,

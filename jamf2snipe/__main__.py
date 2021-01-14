@@ -207,6 +207,36 @@ SNIPE_API_COUNT = 0
 FIRST_SNIPE_CALL = None
 
 
+def attempt_to_check_out(snipe_api, asset_serial, username, allow_fuzzy_search):
+    """Tries to check out the given asset to the given username.
+
+    :param snipe_api: snipe.Snipe instance that the asset lives in.
+
+    :param asset_serial: Asset serial number.
+
+    :param username: Username to check asset out to.
+
+    :param allow_fuzzy_search:
+        See snipe.Snipe.get_user's documentation for fuzzy_search.
+
+    :returns: True if the checkout attempt was successful, False if it was not.
+    """
+
+    try:
+        target_snipe_user = snipe_api.get_user(
+            username, fuzzy_search=allow_fuzzy_search
+        )
+        snipe_api.checkout_asset(target_snipe_user["id"], asset_serial)
+        return True
+    except snipe.UserNotFound:
+        logging.error(
+            "Could not find user %s in snipe-it, leaving item not checked out. Fuzzy search: %s",
+            username,
+            allow_fuzzy_search,
+        )
+    return False
+
+
 def main():
     # Do some tests to see if the user has updated their settings.conf file
     settings_correct = True
@@ -515,11 +545,11 @@ def main():
                         jamf_return[str(jamf_data_category)][str(jamf_data_field)],
                     )
                     jamf_username = jamf_return[jamf_data_category][jamf_data_field]
-                    target_snipe_user = snipe_it.get_user(
-                        jamf_username, fuzzy_search=ALLOW_FUZZY_SEARCH
-                    )
-                    snipe_it.checkout_asset(
-                        target_snipe_user["id"], new_snipe_asset["serial"]
+                    attempt_to_check_out(
+                        snipe_it,
+                        new_snipe_asset["serial"],
+                        jamf_username,
+                        ALLOW_FUZZY_SEARCH,
                     )
 
             # Log an error if there's an issue, or more than once match.
@@ -636,11 +666,11 @@ def main():
                             jamf_username = jamf_return[jamf_data_category][
                                 jamf_data_field
                             ]
-                            target_snipe_user = snipe_it.get_user(
-                                jamf_username, fuzzy_search=ALLOW_FUZZY_SEARCH
-                            )
-                            snipe_it.checkout_asset(
-                                target_snipe_user["id"], snipe_serial
+                            attempt_to_check_out(
+                                snipe_it,
+                                snipe_serial,
+                                jamf_username,
+                                ALLOW_FUZZY_SEARCH,
                             )
                         else:
                             logging.info(

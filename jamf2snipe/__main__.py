@@ -55,6 +55,7 @@ import configparser
 import logging
 import sys
 import time
+import concurrent.futures
 
 import requests
 
@@ -347,27 +348,31 @@ def main():
         if USER_ARGS.mobiles:
             if jamf_type != "mobile_devices":
                 continue
-        for jamf_asset in jamf_types[jamf_type][jamf_type]:
+
+        # Preload all the assets of this type
+        logging.info("Retrieving %s", jamf_type)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+            asset_ids = [asset["id"] for asset in jamf_types[jamf_type][jamf_type]]
+            if jamf_type == "computers":
+                this_type_callable = jamf_api.get_computer
+            else:
+                this_type_callable = jamf_api.get_mobile_device
+
+            jamf_returns = executor.map(this_type_callable, asset_ids)
+
+        for jamf_return in jamf_returns:
+            if jamf_return is None:
+                # The error was already logged by get_computers()
+                continue
+
             current_asset += 1
             logging.info(
                 "Processing entry %s out of %s - JAMFID: %s - NAME: %s",
                 current_asset,
                 total_assets,
-                jamf_asset["id"],
-                jamf_asset["name"],
+                jamf_return["general"]["id"],
+                jamf_return["general"]["name"],
             )
-            # Search through the list by ID for all asset information\
-            if jamf_type == "computers":
-                jamf_return = jamf_api.get_computer(jamf_asset["id"])
-            elif jamf_type == "mobile_devices":
-                jamf_return = jamf_api.get_mobile_device(jamf_asset["id"])
-            if jamf_return is None:
-                logging.warning(
-                    "JAMF did not return a device for ID %s for type %s",
-                    jamf_asset["id"],
-                    jamf_type,
-                )
-                continue
 
             # Check that the model number exists in snipe, if not create it.
             if jamf_type == "computers":

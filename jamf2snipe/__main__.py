@@ -103,6 +103,12 @@ runtimeargs.add_argument(
     help="Updates the Snipe asset with information from Jamf every time, despite what the timestamps indicate.",
     action="store_true",
 )
+runtimeargs.add_argument(
+    "-uns",
+    "--users_no_search",
+    help="Doesn't search for any users if the specified fields in Jamf and Snipe don't match. (case insensitive)",
+    action="store_true",
+)
 user_opts = runtimeargs.add_mutually_exclusive_group()
 user_opts.add_argument(
     "-u",
@@ -111,21 +117,9 @@ user_opts.add_argument(
     action="store_true",
 )
 user_opts.add_argument(
-    "-ui",
-    "--users_inverse",
-    help="Checks out the item to the current user in Jamf if it's already deployed",
-    action="store_true",
-)
-user_opts.add_argument(
     "-uf",
     "--users_force",
     help="Checks out the item to the user specified in Jamf no matter what",
-    action="store_true",
-)
-user_opts.add_argument(
-    "-uns",
-    "--users_no_search",
-    help="Doesn't search for any users if the specified fields in Jamf and Snipe don't match. (case insensitive)",
     action="store_true",
 )
 type_opts = runtimeargs.add_mutually_exclusive_group()
@@ -207,12 +201,15 @@ SNIPE_API_COUNT = 0
 FIRST_SNIPE_CALL = None
 
 
-def attempt_to_check_out(snipe_api, asset_serial, username, allow_fuzzy_search):
-    """Tries to check out the given asset to the given username.
+def set_checked_out_user(snipe_api, asset, username, allow_fuzzy_search):
+    """Tries to set the checked-out user to the specified one.
+
+    If the given username is blank and the asset is checked out, then the asset
+    will be checked in.
 
     :param snipe_api: snipe.Snipe instance that the asset lives in.
 
-    :param asset_serial: Asset serial number.
+    :param asset: Dict representing the Snipe-IT asset's JSON.
 
     :param username: Username to check asset out to.
 
@@ -221,6 +218,13 @@ def attempt_to_check_out(snipe_api, asset_serial, username, allow_fuzzy_search):
 
     :returns: True if the checkout attempt was successful, False if it was not.
     """
+
+    asset_serial = asset["serial"]
+
+    if not username:
+        if asset["assigned_to"] is not None:
+            snipe_api.checkin_asset(asset_serial)
+        return True
 
     try:
         target_snipe_user = snipe_api.get_user(
@@ -246,9 +250,7 @@ def main():
             "Looks like you're using the old method for api-mapping. Please use computers-api-mapping and mobile_devices-api-mapping."
         )
         settings_correct = False
-    if "user-mapping" not in config and (
-        USER_ARGS.users or USER_ARGS.users_force or USER_ARGS.users_inverse
-    ):
+    if "user-mapping" not in config and (USER_ARGS.users or USER_ARGS.users_force):
         logging.error(
             """You've chosen to check out assets to users in some capacity using a cmdline switch, but not specified how you want to
         search Snipe IT for the users from Jamf. Make sure you have a 'user-mapping' section in your settings.conf file."""
@@ -536,7 +538,7 @@ def main():
                     )
                     errors += 1
                     continue
-                if USER_ARGS.users or USER_ARGS.users_force or USER_ARGS.users_inverse:
+                if USER_ARGS.users or USER_ARGS.users_force:
                     jamf_data_category, jamf_data_field = config["user-mapping"][
                         "jamf_api_field"
                     ].split()
@@ -553,11 +555,8 @@ def main():
                         jamf_return[str(jamf_data_category)][str(jamf_data_field)],
                     )
                     jamf_username = jamf_return[jamf_data_category][jamf_data_field]
-                    if not attempt_to_check_out(
-                        snipe_it,
-                        new_snipe_asset["serial"],
-                        jamf_username,
-                        ALLOW_FUZZY_SEARCH,
+                    if not set_checked_out_user(
+                        snipe_it, new_snipe_asset, jamf_username, ALLOW_FUZZY_SEARCH
                     ):
                         errors += 1
 
@@ -656,7 +655,7 @@ def main():
                                     "Skipping the payload, because it already exists, or the Snipe key we're mapping to doesn't."
                                 )
                     if (
-                        (USER_ARGS.users or USER_ARGS.users_inverse)
+                        (USER_ARGS.users)
                         and (snipe_asset["assigned_to"] is None) == USER_ARGS.users
                     ) or USER_ARGS.users_force:
 
@@ -677,9 +676,9 @@ def main():
                             jamf_username = jamf_return[jamf_data_category][
                                 jamf_data_field
                             ]
-                            if not attempt_to_check_out(
+                            if not set_checked_out_user(
                                 snipe_it,
-                                snipe_serial,
+                                snipe_asset,
                                 jamf_username,
                                 ALLOW_FUZZY_SEARCH,
                             ):

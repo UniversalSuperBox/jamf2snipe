@@ -434,7 +434,12 @@ class Snipe:
             ``requests.Response`` object returned by the request if the
             checkin was not successful.
         """
-        asset_id = self.get_asset_by_serial(asset_serial_number)["id"]
+        asset = self.get_asset_by_serial(asset_serial_number)
+        asset_id = asset["id"]
+        if not asset["assigned_to"]:
+            logging.debug("Asset %s is already checked in.", asset_serial_number)
+            return "CheckedOut"
+
         api_url = "{}/api/v1/hardware/{}/checkin".format(self.base_url, asset_id)
         payload = {"note": "checked in by script from Jamf"}
         logging.debug("The payload for the snipe checkin is: %s", payload)

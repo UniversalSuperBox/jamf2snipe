@@ -502,26 +502,17 @@ def main():
                 # Create the payload
                 if jamf_type == "mobile_devices":
                     logging.debug("Payload is being made for a mobile device")
-                    newasset = {
-                        "asset_tag": jamf_asset_tag,
-                        "model_id": model_numbers[
-                            str(jamf_return["general"]["model_identifier"])
-                        ],
-                        "name": jamf_return["general"]["name"],
-                        "status_id": defaultStatus,
-                        "serial": jamf_return["general"]["serial_number"],
-                    }
+                    model_id = str(jamf_return["general"]["model_identifier"])
                 elif jamf_type == "computers":
                     logging.debug("Payload is being made for a computer")
-                    newasset = {
-                        "asset_tag": jamf_asset_tag,
-                        "model_id": model_numbers[
-                            str(jamf_return["hardware"]["model_identifier"])
-                        ],
-                        "name": jamf_return["general"]["name"],
-                        "status_id": defaultStatus,
-                        "serial": jamf_return["general"]["serial_number"],
-                    }
+                    model_id = str(jamf_return["hardware"]["model_identifier"])
+                newasset = {
+                    "asset_tag": jamf_asset_tag,
+                    "model_id": model_numbers[model_id],
+                    "name": jamf_return["general"]["name"],
+                    "status_id": defaultStatus,
+                    "serial": jamf_return["general"]["serial_number"],
+                }
                 if jamf_return["general"]["serial_number"] == "Not Available":
                     logging.error(
                         "The serial number is not available in JAMF. This is normal for DEP enrolled devices that have not yet checked in for the first time. Since there's no serial number yet, we'll skip it for now."

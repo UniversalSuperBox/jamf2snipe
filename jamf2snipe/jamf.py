@@ -103,7 +103,7 @@ class Jamf:
         if response.status_code == 200:
             logging.debug("Got back a valid 200 response code.")
             return response.json()
-        logging.warning(
+        logging.error(
             "Received an invalid status code when trying to retreive JAMF Device list:%s - %s",
             response.status_code,
             response.content,
@@ -122,7 +122,7 @@ class Jamf:
         if response.status_code == 200:
             logging.debug("Got back a valid 200 response code.")
             return response.json()
-        logging.warning(
+        logging.error(
             "Received an invalid status code when trying to retreive JAMF Device list:%s - %s",
             response.status_code,
             response.content,
@@ -139,7 +139,7 @@ class Jamf:
             jsonresponse = response.json()
             logging.debug("Returning: %s", jsonresponse["computer"])
             return jsonresponse["computer"]
-        logging.warning(
+        logging.error(
             "JAMFPro responded with error code:%s when we tried to look up id: %s",
             response,
             jamf_id,
@@ -164,7 +164,7 @@ class Jamf:
             jsonresponse = response.json()
             logging.debug("Returning: %s", jsonresponse["mobile_device"])
             return jsonresponse["mobile_device"]
-        logging.warning(
+        logging.error(
             "JAMFPro responded with error code:%s when we tried to look up id: %s",
             response,
             jamf_id,
@@ -200,7 +200,7 @@ class Jamf:
                 "Got a 200 response code. Returning the response: %s", response
             )
             return response.json()
-        logging.warning(
+        logging.error(
             "Got back an error response code:%s - %s",
             response.status_code,
             response.content,
@@ -235,7 +235,7 @@ class Jamf:
                 "Got a 200 response code. Returning the response: %s", response
             )
             return response.json()
-        logging.warning(
+        logging.error(
             "Got back an error response code:%s - %s",
             response.status_code,
             response.content,

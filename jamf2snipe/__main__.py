@@ -230,8 +230,9 @@ def attempt_to_check_out(snipe_api, asset_serial, username, allow_fuzzy_search):
         return True
     except snipe.UserNotFound:
         logging.error(
-            "Could not find user %s in snipe-it, leaving item not checked out. Fuzzy search: %s",
+            "Could not find user %s in snipe-it, leaving item with serial number %s not checked out. Fuzzy search: %s",
             username,
+            asset_serial,
             allow_fuzzy_search,
         )
     return False
@@ -370,6 +371,7 @@ def main():
     # From this point on, we're editing data.
     logging.info("Starting to Update Inventory")
     current_asset = 0
+    errors = 0
 
     for jamf_type in jamf_types:
         if USER_ARGS.computers:
@@ -393,6 +395,7 @@ def main():
         for jamf_return in jamf_returns:
             if jamf_return is None:
                 # The error was already logged by get_computers()
+                errors += 1
                 continue
 
             current_asset += 1
@@ -515,9 +518,10 @@ def main():
                         "serial": jamf_return["general"]["serial_number"],
                     }
                 if jamf_return["general"]["serial_number"] == "Not Available":
-                    logging.warning(
+                    logging.error(
                         "The serial number is not available in JAMF. This is normal for DEP enrolled devices that have not yet checked in for the first time. Since there's no serial number yet, we'll skip it for now."
                     )
+                    errors += 1
                     continue
                 try:
                     new_snipe_asset = snipe_it.create_asset(newasset)
@@ -527,6 +531,7 @@ def main():
                         "Failed to create asset with the following payload, the error message is above: %s",
                         newasset,
                     )
+                    errors += 1
                     continue
                 if USER_ARGS.users or USER_ARGS.users_force or USER_ARGS.users_inverse:
                     jamf_data_category, jamf_data_field = config["user-mapping"][
@@ -545,24 +550,27 @@ def main():
                         jamf_return[str(jamf_data_category)][str(jamf_data_field)],
                     )
                     jamf_username = jamf_return[jamf_data_category][jamf_data_field]
-                    attempt_to_check_out(
+                    if not attempt_to_check_out(
                         snipe_it,
                         new_snipe_asset["serial"],
                         jamf_username,
                         ALLOW_FUZZY_SEARCH,
-                    )
+                    ):
+                        errors += 1
 
             # Log an error if there's an issue, or more than once match.
             elif snipe_asset == "MultiMatch":
-                logging.warning(
+                logging.error(
                     "WARN: You need to resolve multiple assets with the same serial number in your inventory. If you can't find them in your inventory, you might need to purge your deleted records. You can find that in the Snipe Admin settings. Skipping serial number %s for now.",
                     jamf_return["general"]["serial_number"],
                 )
+                errors += 1
             elif snipe_asset == "ERROR":
                 logging.error(
                     "We got an error when looking up serial number %s in snipe, which shouldn't happen at this point. Check your snipe instance and setup. Skipping for now.",
                     jamf_return["general"]["serial_number"],
                 )
+                errors += 1
 
             else:
                 # Only update if JAMF has more recent info.
@@ -666,17 +674,19 @@ def main():
                             jamf_username = jamf_return[jamf_data_category][
                                 jamf_data_field
                             ]
-                            attempt_to_check_out(
+                            if not attempt_to_check_out(
                                 snipe_it,
                                 snipe_serial,
                                 jamf_username,
                                 ALLOW_FUZZY_SEARCH,
-                            )
+                            ):
+                                errors += 1
                         else:
-                            logging.info(
+                            logging.error(
                                 "Can't checkout %s since the status isn't set to deployable",
                                 jamf_return["general"]["name"],
                             )
+                            errors += 1
 
                 else:
                     logging.info(
@@ -716,6 +726,15 @@ def main():
 
     logging.info("Total amount of API calls made to snipe-it: %i", snipe_it.api_count)
     logging.info("Total amount of API calls made to jamf: %i", jamf_api.api_count)
+
+    if errors > 0:
+        logging.error(
+            "Done. %i assets failed to update. The details are in the log output above.",
+            errors,
+        )
+        sys.exit(1)
+    else:
+        logging.info("Done!")
 
 
 if __name__ == "__main__":

@@ -238,7 +238,7 @@ class Snipe:
         if not self._asset_serial_cache_impl:
             logging.debug("Creating Snipe-IT asset cache.")
             self._asset_serial_cache_impl = {}
-            cache = self._get_paginated_endpoint("/api/v1/hardware")
+            cache = self.get_assets()
             for asset in cache:
                 serial_number = asset["serial"]
                 if self._asset_serial_cache_impl.get(serial_number, None) is not None:
@@ -270,6 +270,10 @@ class Snipe:
             except KeyError:
                 # This item wasn't in the cache anyway, no worries.
                 pass
+
+    def get_assets(self):
+        """Returns a list of all the assets in Snipe-IT."""
+        return self._get_paginated_endpoint("/api/v1/hardware")
 
     def get_user(self, username, fuzzy_search=False):
         """Get the dict object for a User given their username.
@@ -546,6 +550,28 @@ class Snipe:
 
         raise ValueError("The Apple manufacturer was not found.")
 
+    def remove_asset(self, asset_id):
+        """Remove the given asset from Snipe-IT.
+
+        This will send the asset to the "Deleted" page in Snipe-IT. It can be
+        restored by administrators or permanently removed with the Purge
+        operation.
+
+        :raises AssetDeletionError: A problem occurred during delete.
+        """
+        api_url = "{}/api/v1/hardware/{}".format(self.base_url, asset_id)
+        response = self._session.delete(api_url)
+        if response.status_code == 200:
+            response_json = response.json()
+            logging.debug("Got back status code: 200 - %s", response.text)
+            if response_json["status"] == "success":
+                return None
+        raise AssetDeletionError(
+            "Failed to delete asset with ID {}, Snipe-IT's response was: {}".format(
+                asset_id, response.text
+            )
+        )
+
 
 class SnipeItError(Exception):
     """Thrown on general failures when contacting the Snipe-IT API."""
@@ -573,3 +599,7 @@ class AssetNotFound(SnipeItError):
 
 class MultipleAssetsForSerial(SnipeItError):
     """More than one asset was found for a given serial number."""
+
+
+class AssetDeletionError(SnipeItError):
+    """Failed to delete the asset"""

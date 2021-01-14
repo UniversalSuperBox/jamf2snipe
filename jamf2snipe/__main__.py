@@ -62,6 +62,8 @@ import requests
 import snipe
 import jamf
 
+MANAGED_NOTES = "This record is managed by jamf2snipe. Please only edit this asset's information in Jamf. Your changes in Snipe-IT will be overwritten."
+
 # Set us up for using runtime arguments by defining them.
 runtimeargs = argparse.ArgumentParser()
 runtimeargs.add_argument(
@@ -369,6 +371,7 @@ def main():
     logging.info("Starting to Update Inventory")
     current_asset = 0
     errors = 0
+    seen_assets = []
 
     for jamf_type in jamf_types:
         if USER_ARGS.computers:
@@ -406,6 +409,9 @@ def main():
                 jamf_return["general"]["id"],
                 jamf_return["general"]["name"],
             )
+            jamf_serial_number = jamf_return["general"]["serial_number"]
+
+            seen_assets.append(jamf_serial_number)
 
             # Check that the model number exists in snipe, if not create it.
             if jamf_type == "computers":
@@ -448,9 +454,7 @@ def main():
                     model_numbers[jamf_model_identifier] = snipe_model_id
 
             # Pass the SN from JAMF to search for a match in Snipe
-            snipe_asset = snipe_it.get_asset_by_serial(
-                jamf_return["general"]["serial_number"]
-            )
+            snipe_asset = snipe_it.get_asset_by_serial(jamf_serial_number)
 
             # Create a new asset if there's no match:
             if snipe_asset == "NoMatch":
@@ -506,9 +510,10 @@ def main():
                     "model_id": model_numbers[model_id],
                     "name": jamf_return["general"]["name"],
                     "status_id": defaultStatus,
-                    "serial": jamf_return["general"]["serial_number"],
+                    "serial": jamf_serial_number,
+                    "notes": MANAGED_NOTES,
                 }
-                if jamf_return["general"]["serial_number"] == "Not Available":
+                if jamf_serial_number == "Not Available":
                     logging.error(
                         "The serial number is not available in JAMF. This is normal for DEP enrolled devices that have not yet checked in for the first time. Since there's no serial number yet, we'll skip it for now."
                     )
@@ -550,13 +555,13 @@ def main():
             elif snipe_asset == "MultiMatch":
                 logging.error(
                     "WARN: You need to resolve multiple assets with the same serial number in your inventory. If you can't find them in your inventory, you might need to purge your deleted records. You can find that in the Snipe Admin settings. Skipping serial number %s for now.",
-                    jamf_return["general"]["serial_number"],
+                    jamf_serial_number,
                 )
                 errors += 1
             elif snipe_asset == "ERROR":
                 logging.error(
                     "We got an error when looking up serial number %s in snipe, which shouldn't happen at this point. Check your snipe instance and setup. Skipping for now.",
-                    jamf_return["general"]["serial_number"],
+                    jamf_serial_number,
                 )
                 errors += 1
 
@@ -687,6 +692,20 @@ def main():
                     )
 
         executor.shutdown()
+
+    logging.info("Removing assets that jamf2snipe managed and no longer exist in Jamf")
+    for asset in snipe_it.get_assets():
+        asset_serial = asset["serial"]
+        if asset["notes"] == MANAGED_NOTES and asset_serial not in seen_assets:
+            asset_id = asset["id"]
+            logging.info(
+                "Removing asset ID '%s' with serial number '%s'", asset_id, asset_serial
+            )
+            try:
+                snipe_it.remove_asset(asset_id)
+            except snipe.AssetDeletionError as e:
+                logging.exception(e)
+                errors += 1
 
     logging.info("Total amount of API calls made to snipe-it: %i", snipe_it.api_count)
     logging.info("Total amount of API calls made to jamf: %i", jamf_api.api_count)

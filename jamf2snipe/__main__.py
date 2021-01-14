@@ -82,11 +82,6 @@ runtimeargs.add_argument(
     action="store_true",
 )
 runtimeargs.add_argument(
-    "--do_not_update_jamf",
-    help="Does not update Jamf with the asset tags stored in Snipe.",
-    action="store_false",
-)
-runtimeargs.add_argument(
     "--do_not_verify_ssl",
     help="Skips SSL verification for all requests. Helpful when you use self-signed certificate.",
     action="store_true",
@@ -691,31 +686,6 @@ def main():
                         snipe_time,
                     )
 
-                # Update/Sync the Snipe Asset Tag Number back to JAMF
-                # The user arg below is set to false if it's called, so this would fail if the user called it.
-                snipe_asset_tag = snipe_asset["asset_tag"]
-                jamf_asset_id = jamf_return["general"]["id"]
-                if (
-                    jamf_return["general"]["asset_tag"] != snipe_asset_tag
-                ) and USER_ARGS.do_not_update_jamf:
-                    logging.info(
-                        "JAMF doesn't have the same asset tag as SNIPE so we'll update it because it should be authoritative."
-                    )
-                    if snipe_asset_tag:
-                        if jamf_type == "computers":
-                            jamf_api.update_computer_asset_tag(
-                                jamf_asset_id, snipe_asset_tag
-                            )
-                            logging.info(
-                                "Device is a computer, updating computer record"
-                            )
-                        elif jamf_type == "mobile_devices":
-                            jamf_api.update_mobile_device_asset_tag(
-                                jamf_asset_id, snipe_asset_tag
-                            )
-                            logging.info(
-                                "Device is a mobile device, updating the mobile device record"
-                            )
         executor.shutdown()
 
     logging.info("Total amount of API calls made to snipe-it: %i", snipe_it.api_count)

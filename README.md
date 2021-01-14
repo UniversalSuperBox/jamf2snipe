@@ -12,8 +12,6 @@ optional arguments:
                       JAMFPro and Snipe-it instances, but exits before
                       updating or syncing any assets.
 -d, --debug           Sets logging to include additional DEBUG messages.
---do_not_update_jamf  Does not update Jamf with the asset tags stored in
-                      Snipe.
 --do_not_verify_ssl   Skips SSL verification for all requests. Helpful when
                       you use self-signed certificate.
 -r, --ratelimited     Puts a half second delay between Snipe IT API calls to
@@ -36,7 +34,7 @@ optional arguments:
 ## Overview:
 This tool will sync assets between a JAMF Pro instance and a Snipe-IT instance. The tool searches for assets based on the serial number, not the existing asset tag. If assets exist in JAMF and are not in Snipe-IT, the tool will create an asset and try to match it with an existing Snipe model. This match is based on the Mac's model identifier (ex. MacBookAir7,1) being entered as the model number in Snipe, rather than the model name. If a matching model isn't found, it will create one.
 
-When an asset is first created, it will fill out only the most basic information. When the asset already exists in your Snipe inventory, the tool will sync the information you specify in the settings.conf file and make sure that the asset_tag field in JAMF matches the asset tag in Snipe, where Snipe's info is considered the authority.
+When an asset is first created, it will fill out only the most basic information. When the asset already exists in your Snipe inventory, the tool will sync the information you specify in the settings.conf file from JAMF to Snipe.
 
 > Because it determines whether JAMF or Snipe has the most recently updated record, there is the potential to have blank data in Jamf overwrite good data in Snipe (ex. purchase date).
 
@@ -47,8 +45,9 @@ Lastly, if the asset_tag field is blank in JAMF when it is being created in Snip
 - Python3 is installed on your system with the requests, json, time, and configparser python libs installed.
 - Snipe-IT v4.9.4 or higher.
 - Network access to both your JAMF and Snipe-IT environments.
-- A JAMF username and password that has read & write permissions for computer assets.
-  - Computers: Read, Update
+- A JAMF username and password with the following permissions:
+  - Computers: Read
+  - Mobile Devices: Read
 - Snipe API key for a user that has edit/create permissions for assets and models. Snipe-IT documentation instructions for creating API keys: [https://snipe-it.readme.io/reference#generating-api-tokens](https://snipe-it.readme.io/reference#generating-api-tokens)
 
 ## Installation:
@@ -122,7 +121,7 @@ More information can be found in the ./jamf2snipe file about associations and [v
 
 It is *always* a good idea to create a test environment to ensure everything works as expected before running anything in production.
 
-Because `jamf2snipe` only ever writes the asset_tag for a matching serial number back to Jamf, testing with your production JAMF Pro is OK. However, this can overwrite good data in Snipe. You can spin up a Snipe instance in Docker pretty quickly ([see the Snipe docs](https://snipe-it.readme.io/docs/docker)).
+Because `jamf2snipe` never writes data to Jamf, testing with your production JAMF Pro is OK. However, this can overwrite good data in Snipe. You can spin up a Snipe instance in Docker pretty quickly ([see the Snipe docs](https://snipe-it.readme.io/docs/docker)).
 
 ## Contributing
 

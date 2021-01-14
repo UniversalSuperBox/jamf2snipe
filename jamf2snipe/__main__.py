@@ -382,17 +382,20 @@ def main():
                 continue
 
         # Preload all the assets of this type
-        logging.info("Retrieving %s", jamf_type)
-        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
-            asset_ids = [asset["id"] for asset in jamf_types[jamf_type][jamf_type]]
-            if jamf_type == "computers":
-                this_type_callable = jamf_api.get_computer
-            else:
-                this_type_callable = jamf_api.get_mobile_device
+        logging.info("Starting to retrieve %s", jamf_type)
+        asset_ids = [asset["id"] for asset in jamf_types[jamf_type][jamf_type]]
+        if jamf_type == "computers":
+            this_type_callable = jamf_api.get_computer
+        else:
+            this_type_callable = jamf_api.get_mobile_device
 
-            jamf_returns = executor.map(this_type_callable, asset_ids)
+        executor = concurrent.futures.ThreadPoolExecutor(max_workers=10)
+        jamf_futures = {
+            executor.submit(this_type_callable, asset_id) for asset_id in asset_ids
+        }
 
-        for jamf_return in jamf_returns:
+        for jamf_future in concurrent.futures.as_completed(jamf_futures):
+            jamf_return = jamf_future.result()
             if jamf_return is None:
                 # The error was already logged by get_computers()
                 errors += 1
@@ -723,6 +726,7 @@ def main():
                             logging.info(
                                 "Device is a mobile device, updating the mobile device record"
                             )
+        executor.shutdown()
 
     logging.info("Total amount of API calls made to snipe-it: %i", snipe_it.api_count)
     logging.info("Total amount of API calls made to jamf: %i", jamf_api.api_count)

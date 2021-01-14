@@ -20,8 +20,6 @@ optional arguments:
                       every time, despite what the timestamps indicate.
 -u, --users           Checks out the item to the current user in Jamf if
                       it's not already deployed
--ui, --users_inverse  Checks out the item to the current user in Jamf if
-                      it's already deployed
 -uf, --users_force    Checks out the item to the user specified in Jamf no
                       matter what
 -uns, --users_no_search

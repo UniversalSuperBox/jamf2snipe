@@ -56,6 +56,8 @@ import logging
 import sys
 import time
 import concurrent.futures
+import secrets
+import string
 
 import requests
 
@@ -104,6 +106,11 @@ runtimeargs.add_argument(
     "-uns",
     "--users_no_search",
     help="Doesn't search for any users if the specified fields in Jamf and Snipe don't match. (case insensitive)",
+    action="store_true",
+)
+runtimeargs.add_argument(
+    "--create_snipe_users",
+    help="Creates users in Snipe-IT if they don't exist.",
     action="store_true",
 )
 user_opts = runtimeargs.add_mutually_exclusive_group()
@@ -196,6 +203,51 @@ logging.info(
 ### Setup Some Functions ###
 SNIPE_API_COUNT = 0
 FIRST_SNIPE_CALL = None
+
+
+def create_user_if_not_exists(
+    snipe_api,
+    allow_fuzzy_search,
+    real_name,
+    username,
+    email,
+):
+    """Create the given user if they don't exist.
+
+    :param snipe_api: snipe.Snipe instance that the user will live in.
+
+    :param allow_fuzzy_search:
+        See snipe.Snipe.get_user's documentation for fuzzy_search.
+
+    All other parameters match the Snipe-IT API. If the username is empty, the
+    function returns. If first_name is not set, the function uses the username.
+
+    Creates a random password for the user, but creates the user without the
+    ability to sign in.
+    """
+    if not username:
+        return
+
+    try:
+        first_name, last_name = real_name.split(maxsplit=1)
+    except ValueError:
+        first_name = real_name
+        last_name = ""
+
+    if not first_name:
+        first_name = username
+        last_name = ""
+
+    try:
+        snipe_api.get_user(username, fuzzy_search=allow_fuzzy_search)
+    except snipe.UserNotFound:
+        # The user can't log in, but we should set a very good password anyway
+        logging.info("Creating new user %s", username)
+        alphabet = string.ascii_letters + string.digits + string.punctuation
+        password = "".join(secrets.choice(alphabet) for i in range(64))
+        snipe_api.create_user(
+            first_name, last_name, username, password, email, activated=False
+        )
 
 
 def set_checked_out_user(snipe_api, asset, username, allow_fuzzy_search):
@@ -546,6 +598,14 @@ def main():
                         jamf_return[str(jamf_data_category)][str(jamf_data_field)],
                     )
                     jamf_username = jamf_return[jamf_data_category][jamf_data_field]
+                    if USER_ARGS.create_snipe_users:
+                        create_user_if_not_exists(
+                            snipe_it,
+                            ALLOW_FUZZY_SEARCH,
+                            jamf_return["location"]["realname"],
+                            jamf_return["location"]["username"],
+                            jamf_return["location"]["email_address"],
+                        )
                     if not set_checked_out_user(
                         snipe_it, new_snipe_asset, jamf_username, ALLOW_FUZZY_SEARCH
                     ):
@@ -667,6 +727,14 @@ def main():
                             jamf_username = jamf_return[jamf_data_category][
                                 jamf_data_field
                             ]
+                            if USER_ARGS.create_snipe_users:
+                                create_user_if_not_exists(
+                                    snipe_it,
+                                    ALLOW_FUZZY_SEARCH,
+                                    jamf_return["location"]["realname"],
+                                    jamf_return["location"]["username"],
+                                    jamf_return["location"]["email_address"],
+                                )
                             if not set_checked_out_user(
                                 snipe_it,
                                 snipe_asset,

@@ -25,6 +25,7 @@ optional arguments:
 -uns, --users_no_search
                       Doesn't search for any users if the specified fields
                       in Jamf and Snipe don't match. (case insensitive)
+--create_snipe_users  Creates users in Snipe-IT if they don't exist.
 -m, --mobiles         Runs against the Jamf mobiles endpoint only.
 -c, --computers       Runs against the Jamf computers endpoint only.
 ```
